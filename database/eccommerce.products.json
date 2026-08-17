@@ -1,0 +1,100 @@
+[{
+  "_id": {
+    "$oid": "6a7c2c0bc42728032f4dc536"
+  },
+  "productId": "002",
+  "name": "Classic Black Tshirt",
+  "category": "Clothing",
+  "price": 799,
+  "description": "Premimum cotton T-Shirt",
+  "image": "https://ik.imagekit.io/harirai/product-1786522634075_WR5_JPgn-.jpg",
+  "brand": "Gucci",
+  "stock": 20,
+  "createdAt": {
+    "$date": "2026-08-12T08:17:15.526Z"
+  },
+  "updatedAt": {
+    "$date": "2026-08-12T08:17:15.526Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a7c40f75d654f930c536ca4"
+  },
+  "productId": "003",
+  "name": "Combo tshirts",
+  "category": "Tshirts",
+  "price": 1199,
+  "description": "Premimum cotton T-Shirts",
+  "image": "https://ik.imagekit.io/harirai/product-1786527989805_ycsD7ckRt.jpg",
+  "brand": "Aman",
+  "stock": 20,
+  "createdAt": {
+    "$date": "2026-08-12T09:46:31.387Z"
+  },
+  "updatedAt": {
+    "$date": "2026-08-12T09:46:31.387Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a7c43875d654f930c536ca7"
+  },
+  "productId": "004",
+  "name": "White tshirt",
+  "category": "Tshirts",
+  "price": 499,
+  "description": "Premimum cotton T-Shirts",
+  "image": "https://ik.imagekit.io/harirai/product-1786528644196_avJJzwqIX.jpg",
+  "brand": "Bellman",
+  "stock": 20,
+  "createdAt": {
+    "$date": "2026-08-12T09:57:27.307Z"
+  },
+  "updatedAt": {
+    "$date": "2026-08-12T09:57:27.307Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a7c43d95d654f930c536ca8"
+  },
+  "productId": "005",
+  "name": "Blue shirt",
+  "category": "Shirts",
+  "price": 599,
+  "description": "Premimum Shirts",
+  "image": "https://ik.imagekit.io/harirai/product-1786528727259_akkIADOgB.jpg",
+  "brand": "Bellman",
+  "stock": 20,
+  "createdAt": {
+    "$date": "2026-08-12T09:58:49.029Z"
+  },
+  "updatedAt": {
+    "$date": "2026-08-12T09:58:49.029Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a7c44055d654f930c536caa"
+  },
+  "productId": "007",
+  "name": "Blue dotted shirt",
+  "category": "Shirts",
+  "price": 599,
+  "description": "Premimum Shirts",
+  "image": "https://ik.imagekit.io/harirai/product-1786528771777_xVdsec_LN.jpg",
+  "brand": "Raritone",
+  "stock": 20,
+  "createdAt": {
+    "$date": "2026-08-12T09:59:33.242Z"
+  },
+  "updatedAt": {
+    "$date": "2026-08-12T09:59:33.242Z"
+  },
+  "__v": 0
+}]
