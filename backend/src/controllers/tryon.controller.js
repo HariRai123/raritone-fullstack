@@ -8,12 +8,6 @@ const {
   AI_SERVICE_URL,
 } = require("../services/ai.service");
 
-/*
-|--------------------------------------------------------------------------
-| Build pose result
-|--------------------------------------------------------------------------
-*/
-
 function getPoseResult(aiResult) {
   const personDetected = Boolean(
     aiResult?.person_detected
@@ -35,19 +29,6 @@ function getPoseResult(aiResult) {
       ),
   };
 }
-
-/*
-|--------------------------------------------------------------------------
-| Build body measurements
-|--------------------------------------------------------------------------
-|
-| These field names must match:
-|
-| MongoDB
-| AI response
-| Frontend
-|
-*/
 
 function getBodyMeasurements(aiResult) {
   const measurements =
@@ -90,12 +71,6 @@ function getBodyMeasurements(aiResult) {
   };
 }
 
-/*
-|--------------------------------------------------------------------------
-| Build frontend response
-|--------------------------------------------------------------------------
-*/
-
 function buildClientResult(document) {
   return {
     id: document._id,
@@ -126,31 +101,13 @@ function buildClientResult(document) {
   };
 }
 
-/*
-|--------------------------------------------------------------------------
-| POST /api/tryon/analyze
-|--------------------------------------------------------------------------
-*/
-
 async function analyzeTryOn(req, res) {
   try {
-    /*
-    |--------------------------------------------------------------------------
-    | Authentication
-    |--------------------------------------------------------------------------
-    */
-
     if (!req.user?.id) {
       return res.status(401).json({
         message: "Unauthorized user",
       });
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | File validation
-    |--------------------------------------------------------------------------
-    */
 
     if (!req.file) {
       return res.status(400).json({
@@ -174,11 +131,6 @@ async function analyzeTryOn(req, res) {
       "Sending image to AI service..."
     );
 
-    /*
-    |--------------------------------------------------------------------------
-    | Send image to FastAPI
-    |--------------------------------------------------------------------------
-    */
 
     let aiResult;
 
@@ -217,12 +169,6 @@ async function analyzeTryOn(req, res) {
         aiError.response?.data
       );
 
-      /*
-      |--------------------------------------------------------------------------
-      | FastAPI validation error
-      |--------------------------------------------------------------------------
-      */
-
       if (
         aiError.response?.status ===
         400
@@ -234,12 +180,6 @@ async function analyzeTryOn(req, res) {
             "The uploaded image could not be processed.",
         });
       }
-
-      /*
-      |--------------------------------------------------------------------------
-      | FastAPI timeout
-      |--------------------------------------------------------------------------
-      */
 
       if (
         aiError.code ===
@@ -253,23 +193,11 @@ async function analyzeTryOn(req, res) {
         });
       }
 
-      /*
-      |--------------------------------------------------------------------------
-      | FastAPI unavailable
-      |--------------------------------------------------------------------------
-      */
-
       return res.status(502).json({
         message:
           "AI service is currently unavailable. Please try again.",
       });
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Validate AI response
-    |--------------------------------------------------------------------------
-    */
 
     if (
       !aiResult ||
@@ -286,11 +214,6 @@ async function analyzeTryOn(req, res) {
       });
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | person_detected is required
-    |--------------------------------------------------------------------------
-    */
 
     if (
       typeof aiResult.person_detected !==
@@ -307,23 +230,11 @@ async function analyzeTryOn(req, res) {
       });
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Convert AI response
-    |--------------------------------------------------------------------------
-    */
-
     const poseResult =
       getPoseResult(aiResult);
 
     const bodyMeasurements =
       getBodyMeasurements(aiResult);
-
-    /*
-    |--------------------------------------------------------------------------
-    | Upload original image to ImageKit
-    |--------------------------------------------------------------------------
-    */
 
     let imageReference = "";
 
@@ -356,12 +267,6 @@ async function analyzeTryOn(req, res) {
       });
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Save analysis to MongoDB
-    |--------------------------------------------------------------------------
-    */
-
     const tryOnResult =
       await TryOn.create({
         user_id: req.user.id,
@@ -387,12 +292,6 @@ async function analyzeTryOn(req, res) {
           "pose-v1",
       });
 
-    /*
-    |--------------------------------------------------------------------------
-    | Return result to React
-    |--------------------------------------------------------------------------
-    */
-
     return res.status(200).json({
       message:
         "Try-on analysis completed",
@@ -415,38 +314,17 @@ async function analyzeTryOn(req, res) {
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| GET /api/tryon/my-results
-|--------------------------------------------------------------------------
-|
-| Existing endpoint used by Profile.jsx.
-|
-*/
-
 async function getMyTryOnResults(
   req,
   res
 ) {
   try {
-    /*
-    |--------------------------------------------------------------------------
-    | Authentication
-    |--------------------------------------------------------------------------
-    */
-
     if (!req.user?.id) {
       return res.status(401).json({
         message:
           "Unauthorized user",
       });
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Find only current user's results
-    |--------------------------------------------------------------------------
-    */
 
     const results =
       await TryOn.find({
@@ -475,39 +353,18 @@ async function getMyTryOnResults(
     });
   }
 }
-
-/*
-|--------------------------------------------------------------------------
-| GET /api/tryon/history
-|--------------------------------------------------------------------------
-|
-| Required by Task 10.
-|
-*/
 
 async function getTryOnHistory(
   req,
   res
 ) {
   try {
-    /*
-    |--------------------------------------------------------------------------
-    | Authentication
-    |--------------------------------------------------------------------------
-    */
-
     if (!req.user?.id) {
       return res.status(401).json({
         message:
           "Unauthorized user",
       });
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Get current user's history
-    |--------------------------------------------------------------------------
-    */
 
     const results =
       await TryOn.find({
@@ -537,34 +394,11 @@ async function getTryOnHistory(
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| GET /api/tryon/history/:id
-|--------------------------------------------------------------------------
-|
-| Required by Task 10.
-|
-| IMPORTANT:
-| We search using BOTH:
-|
-|   _id
-|   user_id
-|
-| This prevents User B from accessing User A's result.
-|
-*/
-
 async function getTryOnResultById(
   req,
   res
 ) {
   try {
-    /*
-    |--------------------------------------------------------------------------
-    | Authentication
-    |--------------------------------------------------------------------------
-    */
-
     if (!req.user?.id) {
       return res.status(401).json({
         message:
@@ -573,12 +407,6 @@ async function getTryOnResultById(
     }
 
     const { id } = req.params;
-
-    /*
-    |--------------------------------------------------------------------------
-    | Validate MongoDB ObjectId
-    |--------------------------------------------------------------------------
-    */
 
     if (
       !mongoose.Types.ObjectId.isValid(
@@ -591,12 +419,6 @@ async function getTryOnResultById(
       });
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Find result belonging to current user
-    |--------------------------------------------------------------------------
-    */
-
     const result =
       await TryOn.findOne({
         _id: id,
@@ -605,24 +427,12 @@ async function getTryOnResultById(
           req.user.id,
       }).lean();
 
-    /*
-    |--------------------------------------------------------------------------
-    | Result not found
-    |--------------------------------------------------------------------------
-    */
-
     if (!result) {
       return res.status(404).json({
         message:
           "Try-on analysis not found",
       });
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Return result
-    |--------------------------------------------------------------------------
-    */
 
     return res.status(200).json({
       message:
@@ -642,12 +452,6 @@ async function getTryOnResultById(
     });
   }
 }
-
-/*
-|--------------------------------------------------------------------------
-| EXPORTS
-|--------------------------------------------------------------------------
-*/
 
 module.exports = {
   analyzeTryOn,

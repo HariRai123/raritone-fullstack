@@ -18,12 +18,10 @@ function Navbar({ search, onSearch }) {
     <header className="navbar">
       <div className="navbar-top">
 
-        {/* Logo */}
         <Link to="/" className="navbar-logo">
           Raritone
         </Link>
 
-        {/* Desktop Navigation */}
         <nav
           className="desktop-nav"
           aria-label="Primary navigation"
@@ -53,12 +51,10 @@ function Navbar({ search, onSearch }) {
           )}
         </nav>
 
-        {/* Right Side Actions */}
         <div className="navbar-actions">
 
           {isAuthenticated ? (
             <>
-              {/* Profile */}
               <Link
                 to="/profile"
                 className="nav-user-chip"
@@ -81,8 +77,6 @@ function Navbar({ search, onSearch }) {
                   {user?.name?.split(" ")[0]}
                 </span>
               </Link>
-
-              {/* Logout */}
               <button
                 type="button"
                 className="nav-logout"
@@ -109,7 +103,6 @@ function Navbar({ search, onSearch }) {
             </>
           )}
 
-          {/* Shopping Bag */}
           <Link
             to="/cart"
             className="icon-button bag-button"
@@ -126,7 +119,6 @@ function Navbar({ search, onSearch }) {
         </div>
       </div>
 
-      {/* Search */}
       {typeof search === "string" && onSearch ? (
         <div className="navbar-search-row">
 

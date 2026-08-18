@@ -3,15 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getProfile } from "../services/authService";
-import { getTryOnHistory } from "../services/tryonService";
+import { getMyTryOnResults } from "../services/tryonService";
 
 function Profile() {
   const { user, updateUserProfile } = useAuth();
-
-  // =========================================================
-  // PROFILE STATES
-  // =========================================================
-
   const [profile, setProfile] = useState(user);
 
   const [name, setName] = useState(
@@ -32,10 +27,6 @@ function Profile() {
 
   const [error, setError] = useState("");
 
-  // =========================================================
-  // TRY-ON STATES
-  // =========================================================
-
   const [tryOnResults, setTryOnResults] = useState([]);
 
   const [tryOnLoading, setTryOnLoading] = useState(true);
@@ -43,10 +34,6 @@ function Profile() {
   const [tryOnError, setTryOnError] = useState("");
 
   const fileRef = useRef(null);
-
-  // =========================================================
-  // LOAD PROFILE
-  // =========================================================
 
   useEffect(() => {
     let mounted = true;
@@ -98,10 +85,6 @@ function Profile() {
       mounted = false;
     };
   }, []);
-
-  // =========================================================
-  // LOAD TRY-ON HISTORY
-  // =========================================================
 
   useEffect(() => {
     let mounted = true;
@@ -162,9 +145,6 @@ function Profile() {
     };
   }, []);
 
-  // =========================================================
-  // CLEANUP PROFILE PREVIEW
-  // =========================================================
 
   useEffect(() => {
     return () => {
@@ -177,10 +157,6 @@ function Profile() {
       }
     };
   }, [preview]);
-
-  // =========================================================
-  // PROFILE IMAGE CHANGE
-  // =========================================================
 
   const handleImageChange = (
     event
@@ -230,9 +206,6 @@ function Profile() {
     );
   };
 
-  // =========================================================
-  // UPDATE PROFILE
-  // =========================================================
 
   const handleSubmit = async (
     event
@@ -314,10 +287,6 @@ function Profile() {
     }
   };
 
-  // =========================================================
-  // DATE FORMAT
-  // =========================================================
-
   const formatDate = (
     date
   ) => {
@@ -346,10 +315,6 @@ function Profile() {
     );
   };
 
-  // =========================================================
-  // TIME FORMAT
-  // =========================================================
-
   const formatProcessingTime = (
     time
   ) => {
@@ -370,9 +335,6 @@ function Profile() {
     return `${number.toFixed(4)}s`;
   };
 
-  // =========================================================
-  // MEASUREMENT FORMAT
-  // =========================================================
 
   const formatMeasurement = (
     value
@@ -395,10 +357,6 @@ function Profile() {
     return number.toFixed(4);
   };
 
-  // =========================================================
-  // LOADING
-  // =========================================================
-
   if (loading) {
     return (
       <div className="route-loading">
@@ -411,16 +369,8 @@ function Profile() {
     );
   }
 
-  // =========================================================
-  // PAGE
-  // =========================================================
-
   return (
     <section className="profile-page app-page">
-
-      {/* =====================================================
-          PROFILE HEADER
-      ===================================================== */}
 
       <div className="profile-header">
 
@@ -440,8 +390,6 @@ function Profile() {
           </p>
 
         </div>
-
-        {/* ADMIN LINKS */}
 
         {profile?.role === "admin" && (
 
@@ -474,15 +422,7 @@ function Profile() {
 
       </div>
 
-      {/* =====================================================
-          PROFILE INFORMATION
-      ===================================================== */}
-
       <div className="profile-layout">
-
-        {/* ===================================================
-            PROFILE SUMMARY
-        =================================================== */}
 
         <aside className="profile-card profile-summary-card">
 
@@ -533,10 +473,6 @@ function Profile() {
 
         </aside>
 
-        {/* ===================================================
-            PERSONAL INFORMATION
-        =================================================== */}
-
         <div className="profile-card">
 
           <form
@@ -557,23 +493,17 @@ function Profile() {
 
             </div>
 
-            {/* SUCCESS */}
-
             {message && (
               <div className="success-message">
                 {message}
               </div>
             )}
 
-            {/* ERROR */}
-
             {error && (
               <div className="error-message">
                 {error}
               </div>
             )}
-
-            {/* NAME */}
 
             <div className="form-group">
 
@@ -594,8 +524,6 @@ function Profile() {
 
             </div>
 
-            {/* EMAIL */}
-
             <div className="form-group">
 
               <label htmlFor="profile-email">
@@ -612,8 +540,6 @@ function Profile() {
               />
 
             </div>
-
-            {/* PROFILE IMAGE */}
 
             <div className="form-group">
 
@@ -638,8 +564,6 @@ function Profile() {
 
             </div>
 
-            {/* SAVE */}
-
             <button
               className="primary-button"
               type="submit"
@@ -655,10 +579,6 @@ function Profile() {
         </div>
 
       </div>
-
-      {/* =====================================================
-          TRY-ON HISTORY
-      ===================================================== */}
 
       <div className="profile-card try-on-history-card">
 
@@ -679,10 +599,6 @@ function Profile() {
 
         </div>
 
-        {/* ===================================================
-            LOADING
-        =================================================== */}
-
         {tryOnLoading && (
 
           <div className="try-on-history-loading">
@@ -698,10 +614,6 @@ function Profile() {
 
         )}
 
-        {/* ===================================================
-            ERROR
-        =================================================== */}
-
         {!tryOnLoading &&
           tryOnError && (
 
@@ -710,10 +622,6 @@ function Profile() {
             </div>
 
           )}
-
-        {/* ===================================================
-            EMPTY
-        =================================================== */}
 
         {!tryOnLoading &&
           !tryOnError &&
@@ -737,10 +645,6 @@ function Profile() {
 
           )}
 
-        {/* ===================================================
-            RESULTS
-        =================================================== */}
-
         {!tryOnLoading &&
           tryOnResults.length > 0 && (
 
@@ -748,12 +652,6 @@ function Profile() {
 
               {tryOnResults.map(
                 (item) => {
-
-                  /*
-                  |--------------------------------------------------
-                  | ML TEAM BODY MEASUREMENTS
-                  |--------------------------------------------------
-                  */
 
                   const measurements =
                     item?.body_measurements ||
@@ -765,10 +663,6 @@ function Profile() {
                       className="try-on-history-item"
                       key={item._id}
                     >
-
-                      {/* =========================================
-                          IMAGE
-                      ========================================= */}
 
                       <div className="try-on-history-image">
 
@@ -791,10 +685,6 @@ function Profile() {
                         )}
 
                       </div>
-
-                      {/* =========================================
-                          CONTENT
-                      ========================================= */}
 
                       <div className="try-on-history-content">
 
@@ -825,10 +715,6 @@ function Profile() {
 
                         </div>
 
-                        {/* =======================================
-                            STATUS
-                        ======================================= */}
-
                         <div className="analysis-status compact">
 
                           {/* PERSON */}
@@ -847,8 +733,6 @@ function Profile() {
 
                           </div>
 
-                          {/* POSE */}
-
                           <div>
 
                             <span>
@@ -866,10 +750,6 @@ function Profile() {
 
                         </div>
 
-                        {/* =======================================
-                            BODY MEASUREMENTS
-                        ======================================= */}
-
                         <div className="measurement-section">
 
                           <h4>
@@ -877,8 +757,6 @@ function Profile() {
                           </h4>
 
                           <div className="measurement-grid compact">
-
-                            {/* SHOULDER */}
 
                             <div className="measurement-card">
 
@@ -895,7 +773,6 @@ function Profile() {
 
                             </div>
 
-                            {/* HIP */}
 
                             <div className="measurement-card">
 
@@ -912,7 +789,6 @@ function Profile() {
 
                             </div>
 
-                            {/* LEFT ARM */}
 
                             <div className="measurement-card">
 
@@ -929,8 +805,6 @@ function Profile() {
 
                             </div>
 
-                            {/* RIGHT ARM */}
-
                             <div className="measurement-card">
 
                               <span>
@@ -946,8 +820,6 @@ function Profile() {
 
                             </div>
 
-                            {/* LEFT LEG */}
-
                             <div className="measurement-card">
 
                               <span>
@@ -962,8 +834,6 @@ function Profile() {
                               </strong>
 
                             </div>
-
-                            {/* RIGHT LEG */}
 
                             <div className="measurement-card">
 
@@ -984,9 +854,6 @@ function Profile() {
 
                         </div>
 
-                        {/* =======================================
-                            POSE MESSAGE
-                        ======================================= */}
 
                         {item.pose_result
                           ?.message && (
@@ -1008,10 +875,6 @@ function Profile() {
 
                         )}
 
-                        {/* =======================================
-                            AI INFORMATION
-                        ======================================= */}
-
                         <div className="try-on-history-meta">
 
                           <span>
@@ -1029,9 +892,6 @@ function Profile() {
 
                         </div>
 
-                        {/* =======================================
-                            IMAGE LINK
-                        ======================================= */}
 
                         {item.image_reference && (
 
@@ -1062,10 +922,6 @@ function Profile() {
             </div>
 
           )}
-
-        {/* ===================================================
-            OPEN TRY-ON
-        =================================================== */}
 
         {!tryOnLoading &&
           tryOnResults.length > 0 && (
