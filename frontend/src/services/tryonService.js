@@ -11,7 +11,7 @@ export const createTryOn = async ({ image, productId }) => {
   const formData = new FormData();
   formData.append("image", image);
   formData.append("productId", productId);
-  const response = await API.post("/tryon", formData);
+ const response = await API.post("/tryon/session", formData);
   return response.data;
 };
 

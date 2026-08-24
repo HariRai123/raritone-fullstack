@@ -15,7 +15,6 @@ import ImageUploader from "../components/ImageUploader";
 import GarmentSelector from "../components/GarmentSelector";
 import { useAuth } from "../context/AuthContext";
 import { createTryOn } from "../services/tryonService";
-import LoadingAnimation from "./LoadingAnimation";
 
 function TryOn() {
   const { isAuthenticated } = useAuth();
@@ -25,28 +24,57 @@ function TryOn() {
   const [image, setImage] = useState(null);
   const [preview, setPreview] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
+
   const [session, setSession] = useState(null);
+
   const [loading, setLoading] = useState(false);
-  const [stage, setStage] = useState("");
   const [error, setError] = useState("");
+
+  /*
+   * ---------------------------------------------------------
+   * AUTHENTICATION
+   * ---------------------------------------------------------
+   */
 
   useEffect(() => {
     if (!isAuthenticated) {
       navigate("/login", {
-        state: { from: "/try-on" },
+        state: {
+          from: "/try-on",
+        },
         replace: true,
       });
     }
   }, [isAuthenticated, navigate]);
 
+  /*
+   * ---------------------------------------------------------
+   * PRODUCT QUERY PARAMETER
+   *
+   * Example:
+   * /try-on?product=PRODUCT_ID
+   *
+   * GarmentSelector remains responsible for loading/selecting
+   * the actual product.
+   * ---------------------------------------------------------
+   */
+
   useEffect(() => {
     const productId = searchParams.get("product");
 
-    if (!productId) return;
+    if (!productId) {
+      return;
+    }
 
     // GarmentSelector remains the source of truth
     // for loading the actual MongoDB product.
   }, [searchParams]);
+
+  /*
+   * ---------------------------------------------------------
+   * CLEANUP PREVIEW URL
+   * ---------------------------------------------------------
+   */
 
   useEffect(() => {
     return () => {
@@ -56,16 +84,35 @@ function TryOn() {
     };
   }, [preview]);
 
+  /*
+   * ---------------------------------------------------------
+   * IMAGE SELECTED
+   * ---------------------------------------------------------
+   */
+
   const handleImageSelected = (file) => {
+    if (!file) {
+      return;
+    }
+
     if (preview?.startsWith("blob:")) {
       URL.revokeObjectURL(preview);
     }
 
     setImage(file);
     setPreview(URL.createObjectURL(file));
+
+    // New photo means old session is no longer relevant.
     setSession(null);
+
     setError("");
   };
+
+  /*
+   * ---------------------------------------------------------
+   * REMOVE / RETAKE PHOTO
+   * ---------------------------------------------------------
+   */
 
   const removeImage = () => {
     if (preview?.startsWith("blob:")) {
@@ -78,6 +125,26 @@ function TryOn() {
     setSelectedProduct(null);
     setError("");
   };
+
+  /*
+   * ---------------------------------------------------------
+   * CREATE TRY-ON SESSION
+   *
+   * IMPORTANT:
+   *
+   * We do NOT wait for FastAPI/VTON here.
+   *
+   * Express creates the session and returns the session ID.
+   *
+   * The Result page is responsible for checking:
+   *
+   * pending → processing → completed
+   *
+   * or
+   *
+   * pending → processing → failed
+   * ---------------------------------------------------------
+   */
 
   const handleAnalyze = async () => {
     if (!image) {
@@ -94,41 +161,85 @@ function TryOn() {
       setLoading(true);
       setError("");
 
-      setStage("Uploading image...");
-
-      await new Promise((resolve) => setTimeout(resolve, 250));
-
-      setStage("Sending image to AI/ML service...");
+      /*
+       * No artificial setTimeout.
+       *
+       * No fake "Uploading..." stage.
+       *
+       * No fake "AI processing..." stage.
+       *
+       * The backend owns the actual processing state.
+       */
 
       const response = await createTryOn({
         image,
         productId: selectedProduct._id,
       });
 
-      setStage("Processing pose and body analysis...");
+      console.log("TRY-ON SESSION RESPONSE:", response);
 
-      setSession(response.tryOn);
+      const createdSession = response?.tryOn;
 
-      if (response.tryOn?.id) {
-        navigate(`/try-on/result?id=${response.tryOn.id}`);
+      if (!createdSession) {
+        throw new Error(
+          "Try-on session was not returned by the server.",
+        );
       }
+
+      setSession(createdSession);
+
+      /*
+       * Your backend currently returns the session ID
+       * through tryOn.id.
+       *
+       * Navigate immediately.
+       *
+       * The result page will poll the backend instead of
+       * keeping this page waiting for FastAPI.
+       */
+
+      if (createdSession.id) {
+        navigate(`/try-on/result?id=${createdSession.id}`);
+        return;
+      }
+
+      if (createdSession._id) {
+        navigate(`/try-on/result?id=${createdSession._id}`);
+        return;
+      }
+
+      throw new Error(
+        "Try-on session ID was not returned by the server.",
+      );
     } catch (err) {
       console.error("Try-on workflow error:", err);
 
       setError(
         err.response?.data?.message ||
+          err.response?.data?.error ||
           err.message ||
-          "Unable to process the try-on request.",
+          "Unable to start the try-on session.",
       );
     } finally {
       setLoading(false);
-      setStage("");
     }
   };
+
+  /*
+   * ---------------------------------------------------------
+   * AUTH GUARD
+   * ---------------------------------------------------------
+   */
 
   if (!isAuthenticated) {
     return null;
   }
+
+  /*
+   * ---------------------------------------------------------
+   * UI
+   * ---------------------------------------------------------
+   */
 
   return (
     <section className="min-h-screen bg-neutral-50">
@@ -138,7 +249,6 @@ function TryOn() {
       ====================================================== */}
 
       <div className="border-b border-neutral-200 bg-white">
-
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
 
           <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
@@ -163,9 +273,9 @@ function TryOn() {
               </h1>
 
               <p className="mt-5 max-w-xl text-sm leading-7 text-neutral-500 sm:text-base">
-                Upload your photo, choose a garment from the Raritone
-                collection, and let our AI-powered try-on experience
-                prepare your look.
+                Upload a clear, front-facing full-body photo,
+                choose a garment from the Raritone collection,
+                and start your virtual try-on experience.
               </p>
 
             </div>
@@ -183,7 +293,8 @@ function TryOn() {
                 to="/products"
                 className="inline-flex h-10 items-center gap-2 rounded-full bg-black px-4 text-sm font-medium text-white transition hover:bg-neutral-800"
               >
-                <p className="text-white">Browse Products</p>
+                <span>Browse Products</span>
+
                 <ArrowRight className="h-4 w-4 text-white" />
               </Link>
 
@@ -192,7 +303,6 @@ function TryOn() {
           </div>
 
         </div>
-
       </div>
 
       {/* =====================================================
@@ -256,7 +366,8 @@ function TryOn() {
                   </h2>
 
                   <p className="mt-2 text-sm leading-6 text-neutral-500">
-                    Use a clear full-body photo for the best AI analysis.
+                    Upload a clear, front-facing full-body photo
+                    for better results.
                   </p>
 
                 </div>
@@ -265,6 +376,32 @@ function TryOn() {
                   onImageSelected={handleImageSelected}
                   disabled={loading}
                 />
+
+                <div className="mt-5 rounded-2xl bg-neutral-50 p-4">
+
+                  <div className="flex gap-3">
+
+                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
+                      <Camera className="h-3.5 w-3.5 text-neutral-600" />
+                    </div>
+
+                    <div>
+
+                      <p className="text-xs font-semibold text-neutral-800">
+                        Photo tips
+                      </p>
+
+                      <p className="mt-1 text-xs leading-5 text-neutral-500">
+                        Stand facing the camera, keep your full
+                        body visible, use good lighting, and avoid
+                        heavy obstructions.
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
 
               </div>
 
@@ -293,6 +430,7 @@ function TryOn() {
                     className="inline-flex h-9 items-center gap-2 rounded-full border border-neutral-200 px-3 text-xs font-medium text-neutral-600 transition hover:bg-neutral-50 disabled:opacity-50"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
+
                     Retake
                   </button>
 
@@ -370,8 +508,8 @@ function TryOn() {
                 </h2>
 
                 <p className="mt-2 max-w-sm text-sm leading-6 text-neutral-500">
-                  Upload your photo first. Your selected garments will
-                  appear here.
+                  Upload your photo first. Your selected garments
+                  will appear here.
                 </p>
 
               </div>
@@ -396,98 +534,91 @@ function TryOn() {
 
                 </div>
 
-                {loading ? (
+                <GarmentSelector
+                  selectedProduct={selectedProduct}
+                  onSelect={setSelectedProduct}
+                />
 
-                  <div className="flex min-h-[450px] flex-col items-center justify-center rounded-2xl bg-neutral-50 p-8 text-center">
+                {/* SELECTED PRODUCT */}
 
-                    <LoadingAnimation
-                      text={stage || "Processing your Try-On..."}
-                    />
+                {selectedProduct && (
 
-                    <p className="mt-5 max-w-sm text-xs leading-5 text-neutral-400">
-                      Please keep this tab open while the AI/ML service
-                      processes your image.
-                    </p>
+                  <div className="mt-6 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
 
-                  </div>
+                    <div className="flex gap-4">
 
-                ) : (
+                      <img
+                        src={selectedProduct.image}
+                        alt={selectedProduct.name}
+                        className="h-20 w-16 rounded-xl object-cover"
+                      />
 
-                  <>
+                      <div className="min-w-0 flex-1">
 
-                    <GarmentSelector
-                      selectedProduct={selectedProduct}
-                      onSelect={setSelectedProduct}
-                    />
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+                          Selected garment
+                        </p>
 
-                    {/* SELECTED PRODUCT */}
+                        <h3 className="mt-1 truncate text-sm font-semibold">
+                          {selectedProduct.name}
+                        </h3>
 
-                    {selectedProduct && (
+                        {selectedProduct.brand && (
+                          <p className="mt-1 text-xs text-neutral-400">
+                            {selectedProduct.brand}
+                          </p>
+                        )}
 
-                      <div className="mt-6 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-
-                        <div className="flex gap-4">
-
-                          <img
-                            src={selectedProduct.image}
-                            alt={selectedProduct.name}
-                            className="h-20 w-16 rounded-xl object-cover"
-                          />
-
-                          <div className="min-w-0 flex-1">
-
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
-                              Selected garment
-                            </p>
-
-                            <h3 className="mt-1 truncate text-sm font-semibold">
-                              {selectedProduct.name}
-                            </h3>
-
-                            <p className="mt-1 text-sm text-neutral-500">
-                              ₹
-                              {Number(
-                                selectedProduct.price || 0,
-                              ).toLocaleString("en-IN")}
-                            </p>
-
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => setSelectedProduct(null)}
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-white"
-                            aria-label="Remove selected garment"
-                          >
-                            <X className="h-4 w-4 text-neutral-400" />
-                          </button>
-
-                        </div>
+                        <p className="mt-1 text-sm text-neutral-500">
+                          ₹
+                          {Number(
+                            selectedProduct.price || 0,
+                          ).toLocaleString("en-IN")}
+                        </p>
 
                       </div>
 
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedProduct(null)}
+                        disabled={loading}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-white disabled:opacity-50"
+                        aria-label="Remove selected garment"
+                      >
+                        <X className="h-4 w-4 text-neutral-400" />
+                      </button>
 
-                    {/* ACTION */}
+                    </div>
 
-                    <button
-                      type="button"
-                      disabled={!selectedProduct || !image}
-                      onClick={handleAnalyze}
-                      className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-black px-6 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
-                    >
-
-                      <Sparkles className="h-4 w-4" />
-
-                      {selectedProduct
-                        ? `Try On ${selectedProduct.name}`
-                        : "Select a Garment to Continue"}
-
-                    </button>
-
-                  </>
+                  </div>
 
                 )}
+
+                {/* =================================================
+                    TRY ON ACTION
+                ================================================== */}
+
+                <button
+                  type="button"
+                  disabled={!selectedProduct || !image || loading}
+                  onClick={handleAnalyze}
+                  className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-black px-6 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
+                >
+
+                  <Sparkles className="h-4 w-4" />
+
+                  {loading
+                    ? "Creating Try-On Session..."
+                    : selectedProduct
+                      ? `Try On ${selectedProduct.name}`
+                      : "Select a Garment to Continue"}
+
+                </button>
+
+                <p className="mt-3 text-center text-[11px] leading-5 text-neutral-400">
+                  Your photo will be securely sent through the
+                  Raritone backend for AI processing.
+                </p>
 
               </div>
 
@@ -509,30 +640,53 @@ function TryOn() {
               number="01"
               icon={Upload}
               title="Upload"
-              description="Add a clear photo of yourself."
+              description="Add a clear, front-facing full-body photo."
             />
 
             <TryOnStep
               number="02"
               icon={Sparkles}
               title="AI Analysis"
-              description="Our AI service analyzes your pose."
+              description="Raritone analyzes your pose and prepares the try-on session."
             />
 
             <TryOnStep
               number="03"
               icon={Camera}
               title="Try On"
-              description="See the selected garment on your photo."
+              description="See the selected garment on your photo when processing is complete."
             />
 
           </div>
 
         </div>
 
+        {/* =====================================================
+            SESSION CREATED
+        ====================================================== */}
+
         {session && (
           <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
-            Try-on session created successfully.
+
+            <div className="flex items-center gap-2">
+
+              <Check className="h-4 w-4" />
+
+              <span>
+                Try-on session created successfully.
+              </span>
+
+            </div>
+
+            {session.status && (
+              <p className="mt-1 text-xs text-green-600">
+                Session status:{" "}
+                {String(session.status)
+                  .replaceAll("_", " ")
+                  .toUpperCase()}
+              </p>
+            )}
+
           </div>
         )}
 

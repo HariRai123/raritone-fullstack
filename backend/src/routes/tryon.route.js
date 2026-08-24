@@ -31,7 +31,7 @@ function handleUpload(req, res, next) {
 }
 
 router.post("/analyze", authMiddleware, handleUpload, analyzeTryOn);
-router.post("/", authMiddleware, handleUpload, createTryOn);
+router.post("/session", authMiddleware, handleUpload, createTryOn);
 router.get("/history", authMiddleware, getTryOnHistory);
 router.get("/history/:id", authMiddleware, getTryOnResultById);
 router.get("/my-results", authMiddleware, getMyTryOnResults);
