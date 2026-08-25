@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Camera, Eye, EyeOff, LockKeyhole, Mail, UserRound } from "lucide-react";
+import { ArrowRight, Camera, Eye, EyeOff, Mail, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
