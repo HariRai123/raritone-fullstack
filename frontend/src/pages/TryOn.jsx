@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
@@ -13,8 +13,16 @@ import {
 
 import ImageUploader from "../components/ImageUploader";
 import GarmentSelector from "../components/GarmentSelector";
+import ErrorState from "../components/ErrorState";
+import ProcessingStatus from "../components/ProcessingStatus";
+
 import { useAuth } from "../context/AuthContext";
-import { createTryOn } from "../services/tryonService";
+
+import {
+  createTryOn,
+  getTryOnSession,
+  retryTryOn,
+} from "../services/tryOnService";
 
 function TryOn() {
   const { isAuthenticated } = useAuth();
@@ -23,15 +31,18 @@ function TryOn() {
   const [image, setImage] = useState(null);
   const [preview, setPreview] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
+
   const [session, setSession] = useState(null);
+
   const [loading, setLoading] = useState(false);
+
   const [error, setError] = useState("");
 
-  /*
-   * ---------------------------------------------------------
-   * AUTHENTICATION
-   * ---------------------------------------------------------
-   */
+  const [processingStatus, setProcessingStatus] = useState("idle");
+
+  const [retrying, setRetrying] = useState(false);
+
+  const mountedRef = useRef(true);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -44,51 +55,42 @@ function TryOn() {
     }
   }, [isAuthenticated, navigate]);
 
-  /*
-   * ---------------------------------------------------------
-   * CLEANUP PREVIEW URL
-   * ---------------------------------------------------------
-   */
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
-      if (preview?.startsWith("blob:")) {
+      if (preview && preview.startsWith("blob:")) {
         URL.revokeObjectURL(preview);
       }
     };
   }, [preview]);
-
-  /*
-   * ---------------------------------------------------------
-   * IMAGE SELECTED
-   * ---------------------------------------------------------
-   */
 
   const handleImageSelected = (file) => {
     if (!file) {
       return;
     }
 
-    if (preview?.startsWith("blob:")) {
+    if (preview && preview.startsWith("blob:")) {
       URL.revokeObjectURL(preview);
     }
 
-    setImage(file);
-    setPreview(URL.createObjectURL(file));
+    const newPreview = URL.createObjectURL(file);
 
-    // A new image means the previous session is no longer relevant.
+    setImage(file);
+    setPreview(newPreview);
+
     setSession(null);
     setError("");
+    setProcessingStatus("idle");
+    setLoading(false);
   };
 
-  /*
-   * ---------------------------------------------------------
-   * REMOVE / RETAKE PHOTO
-   * ---------------------------------------------------------
-   */
-
   const removeImage = () => {
-    if (preview?.startsWith("blob:")) {
+    if (preview && preview.startsWith("blob:")) {
       URL.revokeObjectURL(preview);
     }
 
@@ -97,28 +99,125 @@ function TryOn() {
     setSession(null);
     setSelectedProduct(null);
     setError("");
+    setProcessingStatus("idle");
+    setLoading(false);
   };
 
-  /*
-   * ---------------------------------------------------------
-   * CREATE TRY-ON SESSION
-   * ---------------------------------------------------------
-   */
+  const pollTryOnSession = useCallback(
+    async (sessionId) => {
+      const maxAttempts = 40;
+      const pollingInterval = 3000;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        if (!mountedRef.current) {
+          return;
+        }
+
+        try {
+          const response = await getTryOnSession(sessionId);
+
+          const currentSession = response?.result;
+
+          if (!currentSession) {
+            throw new Error("Invalid session response from server.");
+          }
+
+          if (!mountedRef.current) {
+            return;
+          }
+
+          setSession(currentSession);
+
+          if (currentSession.status === "pending") {
+            setProcessingStatus("pending");
+          }
+
+          if (currentSession.status === "processing") {
+            setProcessingStatus("processing");
+          }
+
+          if (currentSession.status === "completed") {
+            setProcessingStatus("completed");
+
+            setLoading(false);
+
+            navigate(`/try-on/result/${sessionId}`);
+
+            return;
+          }
+
+          if (currentSession.status === "failed") {
+            setProcessingStatus("failed");
+
+            setLoading(false);
+
+            setError(
+              currentSession.errorMessage ||
+                "The virtual try-on could not be completed.",
+            );
+
+            return;
+          }
+
+          if (!["pending", "processing"].includes(currentSession.status)) {
+            throw new Error(`Unknown try-on status: ${currentSession.status}`);
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, pollingInterval));
+        } catch (err) {
+          console.error("TRY-ON POLLING ERROR:", err);
+
+          if (!mountedRef.current) {
+            return;
+          }
+
+          setProcessingStatus("failed");
+
+          setLoading(false);
+
+          setError(
+            err.response?.data?.error?.message ||
+              err.response?.data?.message ||
+              err.message ||
+              "Unable to check try-on status.",
+          );
+
+          return;
+        }
+      }
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      setProcessingStatus("failed");
+
+      setLoading(false);
+
+      setError("The try-on is taking longer than expected. Please try again.");
+    },
+    [navigate],
+  );
 
   const handleAnalyze = async () => {
     if (!image) {
       setError("Please upload a photo first.");
+
       return;
     }
 
     if (!selectedProduct) {
       setError("Please select a garment before processing.");
+
       return;
     }
 
     try {
       setLoading(true);
       setError("");
+      setSession(null);
+
+      setProcessingStatus("uploading");
 
       const response = await createTryOn({
         image,
@@ -130,69 +229,90 @@ function TryOn() {
       const createdSession = response?.tryOn;
 
       if (!createdSession) {
-        throw new Error(
-          "Try-on session was not returned by the server.",
-        );
+        throw new Error("Try-on session was not returned by the server.");
+      }
+
+      const sessionId = createdSession.id || createdSession._id;
+
+      if (!sessionId) {
+        throw new Error("Try-on session ID was not returned by the server.");
       }
 
       setSession(createdSession);
 
-      /*
-       * Backend returns the session ID as `id`.
-       *
-       * TryOnResult currently reads:
-       *
-       * /try-on/result?id=SESSION_ID
-       */
+      setProcessingStatus(createdSession.status || "pending");
 
-      if (createdSession.id) {
-        navigate(`/try-on/result?id=${createdSession.id}`);
-        return;
-      }
-
-      if (createdSession._id) {
-        navigate(`/try-on/result?id=${createdSession._id}`);
-        return;
-      }
-
-      throw new Error(
-        "Try-on session ID was not returned by the server.",
-      );
+      await pollTryOnSession(sessionId);
     } catch (err) {
-      console.error("Try-on workflow error:", err);
+      console.error("TRY-ON WORKFLOW ERROR:", err);
+
+      setProcessingStatus("failed");
+
+      setLoading(false);
 
       setError(
-        err.response?.data?.message ||
-          err.response?.data?.error ||
+        err.response?.data?.error?.message ||
+          err.response?.data?.message ||
           err.message ||
           "Unable to start the try-on session.",
       );
-    } finally {
-      setLoading(false);
     }
   };
 
-  /*
-   * ---------------------------------------------------------
-   * AUTH GUARD
-   * ---------------------------------------------------------
-   */
+  const handleRetry = async () => {
+    const sessionId = session?.id || session?._id;
+
+    if (!sessionId) {
+      setError("Try-on session could not be found.");
+
+      return;
+    }
+
+    try {
+      setRetrying(true);
+      setLoading(true);
+      setError("");
+
+      setProcessingStatus("pending");
+
+      const response = await retryTryOn(sessionId);
+
+      console.log("TRY-ON RETRY RESPONSE:", response);
+
+      const retrySession = response?.result;
+
+      if (retrySession) {
+        setSession(retrySession);
+      }
+
+      await pollTryOnSession(sessionId);
+    } catch (err) {
+      console.error("TRY-ON RETRY ERROR:", err);
+
+      setProcessingStatus("failed");
+
+      setLoading(false);
+
+      setError(
+        err.response?.data?.error?.message ||
+          err.response?.data?.message ||
+          err.message ||
+          "Unable to retry the try-on.",
+      );
+    } finally {
+      if (mountedRef.current) {
+        setRetrying(false);
+      }
+    }
+  };
 
   if (!isAuthenticated) {
     return null;
   }
 
-  /*
-   * ---------------------------------------------------------
-   * UI
-   * ---------------------------------------------------------
-   */
-
   return (
     <section className="min-h-screen bg-neutral-50">
-      {/* =====================================================
-          HERO
-      ====================================================== */}
+      {/* HERO */}
 
       <div className="border-b border-neutral-200 bg-white">
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
@@ -208,15 +328,13 @@ function TryOn() {
 
               <h1 className="text-4xl font-semibold tracking-tight text-neutral-950 sm:text-5xl">
                 Try it before
-                <span className="block text-neutral-400">
-                  you buy it.
-                </span>
+                <span className="block text-neutral-400">you buy it.</span>
               </h1>
 
               <p className="mt-5 max-w-xl text-sm leading-7 text-neutral-500 sm:text-base">
                 Upload your photo, choose a garment from the Raritone
-                collection, and let our AI-powered try-on experience
-                prepare your look.
+                collection, and let our AI-powered try-on experience prepare
+                your look.
               </p>
             </div>
 
@@ -241,9 +359,7 @@ function TryOn() {
         </div>
       </div>
 
-      {/* =====================================================
-          ERROR
-      ====================================================== */}
+      {/* ERROR */}
 
       {error && (
         <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
@@ -251,27 +367,19 @@ function TryOn() {
             <X className="mt-0.5 h-4 w-4 shrink-0" />
 
             <div>
-              <p className="text-sm font-medium">
-                Try-on couldn't start
-              </p>
+              <p className="text-sm font-medium">Try-on couldn't start</p>
 
-              <p className="mt-1 text-xs text-red-600">
-                {error}
-              </p>
+              <p className="mt-1 text-xs text-red-600">{error}</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* =====================================================
-          WORKSPACE
-      ====================================================== */}
+      {/* WORKSPACE */}
 
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-          {/* =================================================
-              LEFT — PHOTO
-          ================================================== */}
+          {/* PHOTO */}
 
           <div className="overflow-hidden rounded-3xl border border-neutral-200 bg-white">
             {!preview ? (
@@ -285,13 +393,10 @@ function TryOn() {
                     Step 01
                   </p>
 
-                  <h2 className="mt-1 text-xl font-semibold">
-                    Add your photo
-                  </h2>
+                  <h2 className="mt-1 text-xl font-semibold">Add your photo</h2>
 
                   <p className="mt-2 text-sm leading-6 text-neutral-500">
-                    Use a clear full-body photo for the best AI
-                    analysis.
+                    Use a clear full-body photo for the best AI analysis.
                   </p>
                 </div>
 
@@ -299,26 +404,6 @@ function TryOn() {
                   onImageSelected={handleImageSelected}
                   disabled={loading}
                 />
-
-                <div className="mt-5 rounded-2xl bg-neutral-50 p-4">
-                  <div className="flex gap-3">
-                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
-                      <Camera className="h-3.5 w-3.5 text-neutral-600" />
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-semibold text-neutral-800">
-                        Photo tips
-                      </p>
-
-                      <p className="mt-1 text-xs leading-5 text-neutral-500">
-                        Stand facing the camera, keep your full body
-                        visible, use good lighting, and avoid heavy
-                        obstructions.
-                      </p>
-                    </div>
-                  </div>
-                </div>
               </div>
             ) : (
               <div className="p-5 sm:p-7">
@@ -328,9 +413,7 @@ function TryOn() {
                       Step 01
                     </p>
 
-                    <h2 className="mt-1 text-xl font-semibold">
-                      Your photo
-                    </h2>
+                    <h2 className="mt-1 text-xl font-semibold">Your photo</h2>
                   </div>
 
                   <button
@@ -365,9 +448,7 @@ function TryOn() {
 
                     <p className="mt-1 text-xs text-neutral-400">
                       {image
-                        ? `${(image.size / 1024 / 1024).toFixed(
-                            2,
-                          )} MB`
+                        ? `${(image.size / 1024 / 1024).toFixed(2)} MB`
                         : ""}
                     </p>
                   </div>
@@ -385,9 +466,7 @@ function TryOn() {
             )}
           </div>
 
-          {/* =================================================
-              RIGHT — GARMENT
-          ================================================== */}
+          {/* GARMENT */}
 
           <div className="overflow-hidden rounded-3xl border border-neutral-200 bg-white">
             {!preview ? (
@@ -401,8 +480,8 @@ function TryOn() {
                 </h2>
 
                 <p className="mt-2 max-w-sm text-sm leading-6 text-neutral-500">
-                  Upload your photo first. Your selected garments
-                  will appear here.
+                  Upload your photo first. Your selected garments will appear
+                  here.
                 </p>
               </div>
             ) : (
@@ -422,27 +501,21 @@ function TryOn() {
                 </div>
 
                 {loading ? (
-                  <div className="flex min-h-[450px] flex-col items-center justify-center rounded-2xl bg-neutral-50 p-8 text-center">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-sm">
-                      <Sparkles className="h-6 w-6 animate-pulse text-neutral-500" />
-                    </div>
-
-                    <h3 className="mt-5 text-lg font-semibold">
-                      Creating Try-On Session
-                    </h3>
-
-                    <p className="mt-2 max-w-sm text-sm leading-6 text-neutral-500">
-                      Your request is being submitted. Please wait...
-                    </p>
-                  </div>
+                  <ProcessingStatus status={processingStatus} />
+                ) : processingStatus === "failed" && session ? (
+                  <ErrorState
+                    message={error}
+                    code={session.errorCode}
+                    onRetry={handleRetry}
+                    onUploadNewPhoto={removeImage}
+                    retrying={retrying}
+                  />
                 ) : (
                   <>
                     <GarmentSelector
                       selectedProduct={selectedProduct}
                       onSelect={setSelectedProduct}
                     />
-
-                    {/* SELECTED PRODUCT */}
 
                     {selectedProduct && (
                       <div className="mt-6 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
@@ -478,11 +551,8 @@ function TryOn() {
 
                           <button
                             type="button"
-                            onClick={() =>
-                              setSelectedProduct(null)
-                            }
-                            disabled={loading}
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-white disabled:opacity-50"
+                            onClick={() => setSelectedProduct(null)}
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-white"
                             aria-label="Remove selected garment"
                           >
                             <X className="h-4 w-4 text-neutral-400" />
@@ -491,15 +561,9 @@ function TryOn() {
                       </div>
                     )}
 
-                    {/* TRY ON ACTION */}
-
                     <button
                       type="button"
-                      disabled={
-                        !selectedProduct ||
-                        !image ||
-                        loading
-                      }
+                      disabled={!selectedProduct || !image}
                       onClick={handleAnalyze}
                       className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-black px-6 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
                     >
@@ -509,11 +573,6 @@ function TryOn() {
                         ? `Try On ${selectedProduct.name}`
                         : "Select a Garment to Continue"}
                     </button>
-
-                    <p className="mt-3 text-center text-[11px] leading-5 text-neutral-400">
-                      Your photo will be securely sent through the
-                      Raritone backend for processing.
-                    </p>
                   </>
                 )}
               </div>
@@ -521,9 +580,7 @@ function TryOn() {
           </div>
         </div>
 
-        {/* =====================================================
-            HOW IT WORKS
-        ====================================================== */}
+        {/* HOW IT WORKS */}
 
         <div className="mt-10 border-t border-neutral-200 pt-8">
           <div className="grid gap-6 sm:grid-cols-3">
@@ -550,26 +607,20 @@ function TryOn() {
           </div>
         </div>
 
-        {/* =====================================================
-            SESSION CREATED
-        ====================================================== */}
+        {/* SESSION INFO */}
 
         {session && (
           <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
             <div className="flex items-center gap-2">
               <Check className="h-4 w-4" />
 
-              <span>
-                Try-on session created successfully.
-              </span>
+              <span>Try-on session created successfully.</span>
             </div>
 
             {session.status && (
               <p className="mt-1 text-xs text-green-600">
                 Session status:{" "}
-                {String(session.status)
-                  .replaceAll("_", " ")
-                  .toUpperCase()}
+                {String(session.status).replaceAll("_", " ").toUpperCase()}
               </p>
             )}
           </div>
@@ -579,12 +630,7 @@ function TryOn() {
   );
 }
 
-function TryOnStep({
-  number,
-  icon: Icon,
-  title,
-  description,
-}) {
+function TryOnStep({ number, icon: Icon, title, description }) {
   return (
     <div className="flex gap-4">
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-950 text-white">
@@ -596,13 +642,9 @@ function TryOnStep({
           {number}
         </p>
 
-        <h3 className="mt-1 text-sm font-semibold">
-          {title}
-        </h3>
+        <h3 className="mt-1 text-sm font-semibold">{title}</h3>
 
-        <p className="mt-1 text-xs leading-5 text-neutral-500">
-          {description}
-        </p>
+        <p className="mt-1 text-xs leading-5 text-neutral-500">{description}</p>
       </div>
     </div>
   );

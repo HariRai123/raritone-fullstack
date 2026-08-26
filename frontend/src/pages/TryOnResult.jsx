@@ -1,195 +1,115 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Link,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
+  Camera,
   Check,
-  Clock3,
-  Image as ImageIcon,
   RefreshCw,
-  Share2,
   ShoppingBag,
   Sparkles,
+  Upload,
   X,
 } from "lucide-react";
 
-import { useCart } from "../context/CartContext";
 import {
   getTryOnSession,
   retryTryOn,
-} from "../services/tryonService";
+} from "../services/tryOnService";
 
-const ACTIVE_STATES = new Set([
-  "pending",
-  "processing",
-]);
-
-function StatusPill({ status }) {
-  const label =
-    status?.replaceAll("_", " ") || "unknown";
-
-  const active = ACTIVE_STATES.has(status);
-  const failed = status === "failed";
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider ${
-        failed
-          ? "bg-red-50 text-red-700"
-          : active
-            ? "bg-amber-50 text-amber-700"
-            : "bg-emerald-50 text-emerald-700"
-      }`}
-    >
-      {active ? (
-        <Clock3 className="h-3 w-3" />
-      ) : failed ? (
-        <X className="h-3 w-3" />
-      ) : (
-        <Check className="h-3 w-3" />
-      )}
-
-      {label}
-    </span>
-  );
-}
-
-function formatStatus(status) {
-  return String(status || "unknown").replaceAll(
-    "_",
-    " ",
-  );
-}
+import { useCart } from "../context/CartContext";
 
 function TryOnResult() {
-  const { sessionId: routeSessionId } = useParams();
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { addToCart } = useCart();
 
-  // Supports:
-  // /try-on/result/:sessionId
-  // /try-on/result?id=sessionId
-  const id =
-    routeSessionId || searchParams.get("id");
+  const sessionId = searchParams.get("id");
 
-  const [result, setResult] = useState(null);
+  const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
-
-  /*
-   * ---------------------------------------------------------
-   * LOAD TRY-ON SESSION
-   * ---------------------------------------------------------
-   */
-
-  const loadResult = useCallback(async () => {
-    if (!id) {
-      setError(
-        "No try-on session was provided.",
-      );
-      setLoading(false);
-      return null;
-    }
-
-    try {
-      const data = await getTryOnSession(id);
-
-      if (!data?.result) {
-        throw new Error(
-          "Try-on session was not returned by the server.",
-        );
-      }
-
-      setResult(data.result);
-      setError("");
-
-      return data.result;
-    } catch (err) {
-      setError(
-        err.response?.data?.message ||
-          err.message ||
-          "Unable to load try-on result.",
-      );
-
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  /*
-   * ---------------------------------------------------------
-   * INITIAL LOAD
-   * ---------------------------------------------------------
-   */
 
   useEffect(() => {
     let cancelled = false;
 
-    const fetchInitial = async () => {
-      const nextResult = await loadResult();
-
-      if (cancelled) {
+    const fetchSession = async () => {
+      if (!sessionId) {
+        if (!cancelled) {
+          setError("Try-on session ID is missing.");
+          setLoading(false);
+        }
         return;
       }
 
-      // Initial request completed.
-      // Polling is handled by the separate effect below.
-      if (nextResult) {
-        setResult(nextResult);
+      try {
+        const response = await getTryOnSession(sessionId);
+
+        if (!response?.result) {
+          throw new Error("Try-on session was not found.");
+        }
+
+        if (!cancelled) {
+          setSession(response.result);
+          setError("");
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("TRY-ON RESULT ERROR:", err);
+
+        if (!cancelled) {
+          setError(
+            err.response?.data?.error?.message ||
+              err.response?.data?.message ||
+              err.message ||
+              "Unable to load try-on result.",
+          );
+          setLoading(false);
+        }
       }
     };
 
-    void fetchInitial();
+    fetchSession();
 
     return () => {
       cancelled = true;
     };
-  }, [loadResult]);
+  }, [sessionId]);
 
-  /*
-   * ---------------------------------------------------------
-   * POLLING
-   * ---------------------------------------------------------
-   */
-
-  useEffect(() => {
-    if (
-      !id ||
-      !result ||
-      !ACTIVE_STATES.has(result.status)
-    ) {
-      return undefined;
+  const refreshSession = async () => {
+    if (!sessionId) {
+      setError("Try-on session ID is missing.");
+      return;
     }
 
-    const timer = window.setInterval(() => {
-      void loadResult();
-    }, 2000);
+    try {
+      setLoading(true);
+      setError("");
 
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [
-    id,
-    result?.status,
-    loadResult,
-  ]);
+      const response = await getTryOnSession(sessionId);
 
-  /*
-   * ---------------------------------------------------------
-   * RETRY
-   * ---------------------------------------------------------
-   */
+      if (!response?.result) {
+        throw new Error("Try-on session was not found.");
+      }
+
+      setSession(response.result);
+    } catch (err) {
+      console.error("TRY-ON REFRESH ERROR:", err);
+
+      setError(
+        err.response?.data?.error?.message ||
+          err.response?.data?.message ||
+          err.message ||
+          "Unable to load try-on result.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRetry = async () => {
-    if (!id || retrying) {
+    if (!sessionId) {
+      setError("Try-on session ID is missing.");
       return;
     }
 
@@ -197,551 +117,427 @@ function TryOnResult() {
       setRetrying(true);
       setError("");
 
-      await retryTryOn(id);
+      const response = await retryTryOn(sessionId);
 
-      setResult((current) =>
-        current
-          ? {
-              ...current,
-              status: "pending",
-              resultImageReference: null,
-              errorMessage: "",
-              message:
-                "Retry queued. Waiting for AI processing.",
-            }
-          : current,
-      );
+      if (response?.result) {
+        setSession(response.result);
+      }
 
-      await loadResult();
+      navigate(`/try-on?id=${sessionId}`, {
+        replace: true,
+      });
     } catch (err) {
+      console.error("TRY-ON RESULT RETRY ERROR:", err);
+
       setError(
-        err.response?.data?.message ||
-          "Unable to retry this try-on.",
+        err.response?.data?.error?.message ||
+          err.response?.data?.message ||
+          err.message ||
+          "Unable to retry try-on.",
       );
     } finally {
       setRetrying(false);
     }
   };
 
-  /*
-   * ---------------------------------------------------------
-   * SHARE
-   * ---------------------------------------------------------
-   */
-
-  const handleShare = async () => {
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: "Raritone Try-On Result",
-          url: window.location.href,
-        });
-      } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(
-          window.location.href,
-        );
-
-        setCopied(true);
-
-        window.setTimeout(
-          () => setCopied(false),
-          1800,
-        );
-      }
-    } catch (err) {
-      if (err?.name !== "AbortError") {
-        console.error(
-          "Share failed:",
-          err,
-        );
-      }
+  const handleAddToCart = () => {
+    if (!session?.productId) {
+      return;
     }
+
+    addToCart(session.productId, 1);
+    navigate("/cart");
   };
 
-  /*
-   * ---------------------------------------------------------
-   * PRODUCT
-   * ---------------------------------------------------------
-   */
-
-  const product = useMemo(() => {
-    if (!result) {
-      return null;
-    }
-
-    return typeof result.productId === "object"
-      ? result.productId
-      : result.product || null;
-  }, [result]);
-
-  /*
-   * ---------------------------------------------------------
-   * LOADING STATE
-   * ---------------------------------------------------------
-   */
-
-  if (loading || !result) {
+  if (!sessionId) {
     return (
-      <section className="min-h-screen bg-neutral-50 px-4 py-12 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-5xl rounded-[2rem] border border-neutral-200 bg-white p-8 text-center shadow-sm sm:p-14">
-          {error ? (
-            <X className="mx-auto h-8 w-8 text-red-600" />
-          ) : (
-            <Sparkles className="mx-auto h-8 w-8 animate-pulse" />
-          )}
+      <main className="min-h-screen bg-neutral-50 px-4 py-12">
+        <div className="mx-auto max-w-xl">
+          <div className="rounded-3xl border border-red-200 bg-red-50 p-8 text-center">
+            <X className="mx-auto h-8 w-8 text-red-500" />
 
-          <h1 className="mt-5 text-2xl font-semibold">
-            {error ||
-              "Loading your try-on session…"}
-          </h1>
+            <h1 className="mt-4 text-xl font-semibold text-red-900">
+              Try-On Session Missing
+            </h1>
 
-          <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-neutral-500">
-            {error
-              ? "The session could not be loaded."
-              : "We are retrieving the latest backend status. Please keep this page open."}
-          </p>
+            <p className="mt-2 text-sm text-red-700">
+              We could not find the try-on session.
+            </p>
 
-          <div className="mt-7 flex justify-center gap-3">
             <Link
               to="/try-on"
-              className="rounded-full bg-black px-5 py-3 text-sm font-semibold text-white"
+              className="mt-6 inline-flex h-11 items-center gap-2 rounded-full bg-black px-6 text-sm font-semibold text-white"
             >
-              Back to Try-On
+              <Camera className="h-4 w-4" />
+              Start Try-On
             </Link>
-
-            {error && (
-              <button
-                type="button"
-                onClick={() => void loadResult()}
-                className="rounded-full border border-neutral-200 px-5 py-3 text-sm font-semibold"
-              >
-                Try Again
-              </button>
-            )}
           </div>
         </div>
-      </section>
+      </main>
     );
   }
 
-  /*
-   * ---------------------------------------------------------
-   * RESULT DATA
-   * ---------------------------------------------------------
-   */
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-neutral-50 px-4 py-12">
+        <div className="mx-auto max-w-6xl">
+          <div className="h-6 w-32 animate-pulse rounded bg-neutral-200" />
 
-  const measurements =
-    result.bodyMeasurements || {};
+          <div className="mt-8 grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="aspect-[4/5] animate-pulse rounded-3xl bg-neutral-200" />
 
-  const completed =
-    result.status === "completed";
+            <div className="space-y-5">
+              <div className="h-10 w-64 animate-pulse rounded bg-neutral-200" />
+              <div className="h-20 animate-pulse rounded-2xl bg-neutral-200" />
+              <div className="h-12 animate-pulse rounded-full bg-neutral-200" />
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
-  const failed =
-    result.status === "failed";
+  if (error && !session) {
+    return (
+      <main className="min-h-screen bg-neutral-50 px-4 py-12">
+        <div className="mx-auto max-w-xl">
+          <div className="rounded-3xl border border-red-200 bg-red-50 p-8 text-center">
+            <X className="mx-auto h-8 w-8 text-red-500" />
 
-  const measurementItems = [
-    [
-      "Shoulder Width",
-      "shoulder_width_ratio",
-    ],
-    [
-      "Hip Width",
-      "hip_width_ratio",
-    ],
-    [
-      "Left Arm",
-      "left_arm_ratio",
-    ],
-    [
-      "Right Arm",
-      "right_arm_ratio",
-    ],
-    [
-      "Left Leg",
-      "left_leg_ratio",
-    ],
-    [
-      "Right Leg",
-      "right_leg_ratio",
-    ],
-    [
-      "Torso",
-      "torso_ratio",
-    ],
-    [
-      "Shoulder / Hip",
-      "shoulder_to_hip_ratio",
-    ],
-  ];
+            <h1 className="mt-4 text-xl font-semibold text-red-900">
+              Unable to Load Result
+            </h1>
 
-  /*
-   * ---------------------------------------------------------
-   * MAIN UI
-   * ---------------------------------------------------------
-   */
+            <p className="mt-2 text-sm text-red-700">
+              {error}
+            </p>
 
-  return (
-    <section className="min-h-screen bg-neutral-50 px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
+            <div className="mt-6 flex justify-center gap-3">
+              <button
+                type="button"
+                onClick={refreshSession}
+                className="inline-flex h-11 items-center gap-2 rounded-full bg-black px-5 text-sm font-semibold text-white"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Try Again
+              </button>
 
-        {/* HEADER */}
+              <Link
+                to="/try-on"
+                className="inline-flex h-11 items-center gap-2 rounded-full border border-neutral-200 bg-white px-5 text-sm font-semibold"
+              >
+                Back to Try-On
+              </Link>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-          <div>
+  if (session?.status === "failed") {
+    const retryLimitReached =
+      session.errorCode === "RETRY_LIMIT_REACHED";
+
+    return (
+      <main className="min-h-screen bg-neutral-50">
+        <div className="border-b border-neutral-200 bg-white">
+          <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
             <Link
-              to="/try-on/history"
-              className="mb-4 inline-flex items-center gap-2 text-xs font-medium text-neutral-500 hover:text-black"
+              to="/try-on"
+              className="inline-flex items-center gap-2 text-sm font-medium text-neutral-600 hover:text-black"
             >
               <ArrowLeft className="h-4 w-4" />
-              Try-On History
+              Back to Try-On
             </Link>
+          </div>
+        </div>
 
-            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-neutral-400">
+        <div className="mx-auto flex min-h-[70vh] max-w-xl items-center px-4 py-12">
+          <div className="w-full rounded-3xl border border-red-200 bg-white p-8 text-center shadow-sm">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-50">
+              <X className="h-7 w-7 text-red-500" />
+            </div>
+
+            <p className="mt-6 text-[10px] font-semibold uppercase tracking-[0.25em] text-red-500">
+              Try-On Failed
+            </p>
+
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight">
+              We couldn't generate your try-on.
+            </h1>
+
+            <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-neutral-500">
+              {session.errorMessage ||
+                "Your image could not be processed. Please try again."}
+            </p>
+
+            {session.errorCode && (
+              <div className="mt-4 inline-flex rounded-full bg-neutral-100 px-3 py-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+                  {session.errorCode}
+                </span>
+              </div>
+            )}
+
+            {error && (
+              <div className="mt-5 rounded-xl bg-red-50 p-3 text-xs text-red-600">
+                {error}
+              </div>
+            )}
+
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-center">
+              {!retryLimitReached && (
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  disabled={retrying}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-black px-6 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${
+                      retrying ? "animate-spin" : ""
+                    }`}
+                  />
+
+                  {retrying ? "Retrying..." : "Try Again"}
+                </button>
+              )}
+
+              <Link
+                to="/try-on"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-neutral-200 bg-white px-6 text-sm font-semibold text-neutral-800"
+              >
+                <Upload className="h-4 w-4" />
+                Upload New Photo
+              </Link>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (
+    session?.status === "pending" ||
+    session?.status === "processing"
+  ) {
+    return (
+      <main className="min-h-screen bg-neutral-50">
+        <div className="mx-auto flex min-h-screen max-w-xl items-center px-4 py-12">
+          <div className="w-full rounded-3xl border border-neutral-200 bg-white p-8 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-neutral-950 text-white">
+              <Sparkles className="h-7 w-7 animate-pulse" />
+            </div>
+
+            <p className="mt-6 text-[10px] font-semibold uppercase tracking-[0.25em] text-neutral-400">
               Raritone AI Studio
             </p>
 
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Your Try-On Result
+            <h1 className="mt-2 text-3xl font-semibold">
+              {session.status === "pending"
+                ? "Preparing your try-on..."
+                : "AI is generating your try-on..."}
             </h1>
-          </div>
 
-          <StatusPill status={result.status} />
-        </div>
+            <p className="mt-4 text-sm leading-6 text-neutral-500">
+              Please keep this page open while your try-on is being processed.
+            </p>
 
-        {/* ERROR */}
-
-        {error && (
-          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-
-        {/* PROCESSING */}
-
-        {ACTIVE_STATES.has(result.status) && (
-          <div className="mt-6 flex items-start gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-900">
-            <Sparkles className="mt-0.5 h-5 w-5 animate-pulse" />
-
-            <div>
-              <strong className="text-sm">
-                AI processing in progress
-              </strong>
-
-              <p className="mt-1 text-sm text-amber-800">
-                Backend status:{" "}
-                <b>{result.status}</b>.
-                This page automatically checks
-                for completion.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* FAILED */}
-
-        {failed && (
-          <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-red-200 bg-red-50 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <strong className="text-sm text-red-900">
-                Try-on processing failed
-              </strong>
-
-              <p className="mt-1 text-sm text-red-700">
-                {result.errorMessage ||
-                  result.message ||
-                  "Please retry the session."}
-              </p>
+            <div className="mx-auto mt-8 h-1.5 max-w-xs overflow-hidden rounded-full bg-neutral-100">
+              <div className="h-full w-1/2 animate-pulse rounded-full bg-black" />
             </div>
 
-            <button
-              type="button"
-              onClick={handleRetry}
-              disabled={retrying}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-black px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            <Link
+              to="/try-on/history"
+              className="mt-8 inline-flex items-center gap-2 text-sm font-medium text-neutral-600 hover:text-black"
             >
-              <RefreshCw
-                className={`h-4 w-4 ${
-                  retrying
-                    ? "animate-spin"
-                    : ""
-                }`}
-              />
-
-              {retrying
-                ? "Retrying…"
-                : "Retry Try-On"}
-            </button>
-          </div>
-        )}
-
-        {/* BEFORE / AFTER */}
-
-        <div className="mt-8 grid gap-5 lg:grid-cols-2">
-          {[
-            {
-              label: "BEFORE",
-              title: "Original Photo",
-              src: result.inputImageReference,
-            },
-            {
-              label: "AFTER",
-              title: "AI Try-On Output",
-              src: result.resultImageReference,
-            },
-          ].map((card) => (
-            <div
-              key={card.label}
-              className="overflow-hidden rounded-[2rem] border border-neutral-200 bg-white shadow-sm"
-            >
-              <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-4">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-neutral-400">
-                    {card.label}
-                  </p>
-
-                  <h2 className="mt-1 font-semibold">
-                    {card.title}
-                  </h2>
-                </div>
-
-                <ImageIcon className="h-5 w-5 text-neutral-300" />
-              </div>
-
-              <div className="aspect-[4/5] bg-neutral-100">
-                {card.src ? (
-                  <img
-                    src={card.src}
-                    alt={card.title}
-                    className="h-full w-full object-contain"
-                  />
-                ) : (
-                  <div className="flex h-full flex-col items-center justify-center px-6 text-center text-neutral-400">
-                    <Sparkles className="h-8 w-8" />
-
-                    <p className="mt-3 text-sm">
-                      {completed
-                        ? "Final garment image is not available from the current AI service."
-                        : "Output will appear when processing completes."}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* PRODUCT */}
-
-        {product && (
-          <div className="mt-5 flex flex-col gap-4 rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
-              {product.image && (
-                <img
-                  src={product.image}
-                  alt={product.name}
-                  className="h-16 w-14 rounded-xl object-cover"
-                />
-              )}
-
-              <div>
-                <p className="text-xs text-neutral-400">
-                  Selected garment
-                </p>
-
-                <h2 className="mt-1 text-lg font-semibold">
-                  {product.name}
-                </h2>
-
-                <p className="text-sm text-neutral-500">
-                  {product.brand ||
-                    "Raritone"}{" "}
-                  · ₹
-                  {Number(
-                    product.price || 0,
-                  ).toLocaleString(
-                    "en-IN",
-                  )}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  addToCart(product)
-                }
-                className="inline-flex items-center gap-2 rounded-full bg-black px-5 py-3 text-sm font-semibold text-white"
-              >
-                <ShoppingBag className="h-4 w-4" />
-                Add to Cart
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(
-                    `/products/${product._id}`,
-                  )
-                }
-                className="rounded-full border border-neutral-200 px-5 py-3 text-sm font-semibold"
-              >
-                View Product
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* SUCCESS */}
-
-        {completed &&
-          result.personDetected && (
-            <div className="mt-5 rounded-[2rem] border border-emerald-200 bg-emerald-50 p-5">
-              <div className="flex items-center gap-2 font-semibold text-emerald-900">
-                <Check className="h-5 w-5" />
-                Analysis completed successfully
-              </div>
-
-              <p className="mt-1 text-sm text-emerald-800">
-                The try-on session has been
-                processed and saved.
-              </p>
-            </div>
-          )}
-
-        {/* BODY PROPORTIONS */}
-
-        <div className="mt-5 rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4" />
-
-            <h2 className="font-semibold">
-              Body Proportions
-            </h2>
-          </div>
-
-          <p className="mt-1 text-xs text-neutral-500">
-            Relative AI ratios, not physical
-            measurements in centimeters.
-          </p>
-
-          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {measurementItems.map(
-              ([label, key]) => (
-                <div
-                  key={key}
-                  className="rounded-2xl bg-neutral-50 p-4"
-                >
-                  <span className="text-xs text-neutral-400">
-                    {label}
-                  </span>
-
-                  <strong className="mt-1 block text-lg">
-                    {measurements[key] ?? "--"}
-                  </strong>
-                </div>
-              ),
-            )}
+              View Try-On History
+              <ArrowLeft className="h-4 w-4 rotate-180" />
+            </Link>
           </div>
         </div>
+      </main>
+    );
+  }
 
-        {/* SESSION INFORMATION */}
+  const product = session?.productId;
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-4">
-          <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-            <span className="text-xs text-neutral-400">
-              Status
-            </span>
-
-            <strong className="mt-1 block text-sm capitalize">
-              {formatStatus(
-                result.status,
-              )}
-            </strong>
-          </div>
-
-          <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-            <span className="text-xs text-neutral-400">
-              AI Model
-            </span>
-
-            <strong className="mt-1 block text-sm">
-              {result.aiModelVersion ||
-                "--"}
-            </strong>
-          </div>
-
-          <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-            <span className="text-xs text-neutral-400">
-              Processing
-            </span>
-
-            <strong className="mt-1 block text-sm">
-              {typeof result.processingTime ===
-              "number"
-                ? `${result.processingTime.toFixed(
-                    2,
-                  )}s`
-                : "--"}
-            </strong>
-          </div>
-
-          <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-            <span className="text-xs text-neutral-400">
-              Created
-            </span>
-
-            <strong className="mt-1 block text-sm">
-              {result.createdAt
-                ? new Date(
-                    result.createdAt,
-                  ).toLocaleString(
-                    "en-IN",
-                  )
-                : "--"}
-            </strong>
-          </div>
-        </div>
-
-        {/* ACTIONS */}
-
-        <div className="mt-7 flex flex-wrap gap-3 pb-10">
+  return (
+    <main className="min-h-screen bg-neutral-50">
+      <div className="border-b border-neutral-200 bg-white">
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <Link
             to="/try-on"
-            className="rounded-full bg-black px-5 py-3 text-sm font-semibold text-white"
+            className="inline-flex items-center gap-2 text-sm font-medium text-neutral-600 transition hover:text-black"
           >
-            Try Another
+            <ArrowLeft className="h-4 w-4" />
+            Back to Try-On
           </Link>
-
-          <Link
-            to="/try-on/history"
-            className="rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-semibold"
-          >
-            View History
-          </Link>
-
-          {completed &&
-            result.resultImageReference && (
-              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-700">
-                <Check className="h-4 w-4" />
-                Saved Automatically
-              </span>
-            )}
-
-          <button
-            type="button"
-            onClick={handleShare}
-            className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-semibold"
-          >
-            <Share2 className="h-4 w-4" />
-
-            {copied
-              ? "Copied"
-              : "Share"}
-          </button>
         </div>
       </div>
-    </section>
+
+      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <div className="inline-flex items-center gap-2 rounded-full border border-green-200 bg-green-50 px-3 py-1.5">
+            <Check className="h-3.5 w-3.5 text-green-600" />
+
+            <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-green-700">
+              Try-On Complete
+            </span>
+          </div>
+
+          <h1 className="mt-4 text-4xl font-semibold tracking-tight">
+            Your look is ready.
+          </h1>
+
+          <p className="mt-2 text-sm text-neutral-500">
+            Here's how the selected garment looks on you.
+          </p>
+        </div>
+
+        <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="overflow-hidden rounded-3xl border border-neutral-200 bg-white">
+            <div className="relative bg-neutral-100">
+              {session.resultImageReference ? (
+                <img
+                  src={session.resultImageReference}
+                  alt="Virtual try-on result"
+                  className="max-h-[800px] w-full object-contain"
+                />
+              ) : (
+                <div className="flex min-h-[500px] items-center justify-center">
+                  <div className="text-center">
+                    <X className="mx-auto h-8 w-8 text-neutral-400" />
+
+                    <p className="mt-3 text-sm text-neutral-500">
+                      Result image is unavailable.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="absolute left-5 top-5 inline-flex items-center gap-2 rounded-full bg-white/90 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider shadow-sm backdrop-blur">
+                <Sparkles className="h-3 w-3" />
+                AI Result
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            {product && (
+              <div className="rounded-3xl border border-neutral-200 bg-white p-6">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-neutral-400">
+                  Selected Garment
+                </p>
+
+                <div className="mt-5 flex gap-4">
+                  <img
+                    src={product.image}
+                    alt={product.name}
+                    className="h-28 w-20 rounded-2xl object-cover"
+                  />
+
+                  <div className="min-w-0 flex-1">
+                    {product.brand && (
+                      <p className="text-xs text-neutral-400">
+                        {product.brand}
+                      </p>
+                    )}
+
+                    <h2 className="mt-1 text-lg font-semibold">
+                      {product.name}
+                    </h2>
+
+                    <p className="mt-2 text-base font-medium">
+                      ₹
+                      {Number(
+                        product.price || 0,
+                      ).toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-3xl border border-neutral-200 bg-white p-6">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-neutral-400">
+                Session Details
+              </p>
+
+              <div className="mt-5 space-y-4">
+                <DetailRow
+                  label="Status"
+                  value="Completed"
+                />
+
+                <DetailRow
+                  label="AI Model"
+                  value={
+                    session.aiModelVersion || "VTON"
+                  }
+                />
+
+                <DetailRow
+                  label="Processing Time"
+                  value={
+                    session.processingTime
+                      ? `${Number(
+                          session.processingTime,
+                        ).toFixed(2)} sec`
+                      : "—"
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-neutral-200 bg-white p-6">
+              <div className="grid gap-3">
+                {product && (
+                  <button
+                    type="button"
+                    onClick={handleAddToCart}
+                    className="flex h-12 items-center justify-center gap-2 rounded-full bg-black px-6 text-sm font-semibold text-white transition hover:bg-neutral-800"
+                  >
+                    <ShoppingBag className="h-4 w-4" />
+                    Add to Cart
+                  </button>
+                )}
+
+                <Link
+                  to="/try-on"
+                  className="flex h-12 items-center justify-center gap-2 rounded-full border border-neutral-200 bg-white px-6 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Try Another Product
+                </Link>
+
+                <Link
+                  to="/try-on/history"
+                  className="flex h-12 items-center justify-center gap-2 rounded-full border border-neutral-200 bg-white px-6 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+                >
+                  View Try-On History
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function DetailRow({ label, value }) {
+  return (
+    <div className="flex items-center justify-between border-b border-neutral-100 pb-3 last:border-0 last:pb-0">
+      <span className="text-sm text-neutral-500">
+        {label}
+      </span>
+
+      <span className="text-sm font-medium text-neutral-900">
+        {value}
+      </span>
+    </div>
   );
 }
 
