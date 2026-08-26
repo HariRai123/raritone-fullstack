@@ -89,6 +89,7 @@ function TryOn() {
     setLoading(false);
   };
 
+  //remove image
   const removeImage = () => {
     if (preview && preview.startsWith("blob:")) {
       URL.revokeObjectURL(preview);
