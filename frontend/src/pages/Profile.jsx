@@ -16,7 +16,7 @@ import {
 
 import { useAuth } from "../context/AuthContext";
 import { getProfile } from "../services/authService";
-import { getMyTryOnResults } from "../services/tryOnService";
+import { getMyTryOnResults } from "../services/tryOnService.js"
 
 function Profile() {
   const { user, updateUserProfile } = useAuth();
