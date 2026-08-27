@@ -6,7 +6,8 @@ const authRoutes = require("./routes/auth.route");
 const orderRoutes = require("./routes/order.routes");
 const adminRoutes = require("./routes/admin.routes");
 const tryonRoutes = require("./routes/tryon.route");
-
+const threeDAssetRoutes = require("./routes/threeDAsset.routes");
+const threeDTryOnRoutes = require("./routes/threeDTryOn.routes");
 const app = express();
 
 const allowedOrigins = [
@@ -30,7 +31,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api", orderRoutes);
 app.use("/api", adminRoutes);
 app.use("/api/tryon", tryonRoutes);
-
+app.use("/api/3d-assets", threeDAssetRoutes);
+app.use("/api/3d-tryon", threeDTryOnRoutes);
 app.get("/health", (req, res) => {
   res.status(200).json({
     success: true,
@@ -39,5 +41,3 @@ app.get("/health", (req, res) => {
 });
 
 module.exports = app;
-
-//

@@ -14,7 +14,7 @@ const tryOnSessionSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    inputImageReference: { type: String, required: true },
+    inputImageReference: { type: String, default:null},
     resultImageReference: { type: String, default: null },
     aiModelVersion: { type: String, default: "pose-v1" },
     status: {
@@ -33,6 +33,37 @@ const tryOnSessionSchema = new mongoose.Schema(
     bodyMeasurements: { type: mongoose.Schema.Types.Mixed, default: {} },
     message: { type: String, default: "" },
     errorMessage: { type: String, default: "" },
+    threeDAssetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ThreeDAsset",
+      default: null,
+      index: true,
+    },
+
+    avatarData: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+
+    threeDPoseData: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+
+    threeDBodyData: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+
+    threeDResultReference: {
+      type: String,
+      default: null,
+    },
+
+    threeDModelVersion: {
+      type: String,
+      default: null,
+    },
   },
   { timestamps: true, collection: "tryOnSessions" },
 );
