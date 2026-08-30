@@ -16,6 +16,8 @@ const allowedOrigins = [
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
+//fixed origins
+
 app.use(
   cors({
     origin: allowedOrigins,
