@@ -41,7 +41,13 @@ const productSchema=new mongoose.Schema({
         required:true,
         min:0,
         default:0
-    }
+    },
+     vendorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
 },{timestamps:true}
 );
 

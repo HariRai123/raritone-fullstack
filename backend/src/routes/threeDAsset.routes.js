@@ -12,12 +12,15 @@ const {
   getAllThreeDAssets,
 } = require("../controllers/threeDAsset.controller");
 
+const authorizeVendorProduct = require("../middleware/vendorProductAuthorization.middleware");
+
 const router = express.Router();
 
 router.post(
   "/",
   authMiddleware,
   handleThreeDAssetUpload,
+  authorizeVendorProduct,
   createThreeDAsset,
 );
 
@@ -28,10 +31,7 @@ router.get(
   getAllThreeDAssets,
 );
 
-router.get(
-  "/products/:productId/3d",
-  getProductThreeDAsset,
-);
+router.get("/products/:productId/3d", getProductThreeDAsset);
 
 router.put(
   "/:id/review",
@@ -40,10 +40,6 @@ router.put(
   reviewThreeDAsset,
 );
 
-router.get(
-  "/:id",
-  authMiddleware,
-  getThreeDAssetById,
-);
+router.get("/:id", authMiddleware, getThreeDAssetById);
 
 module.exports = router;

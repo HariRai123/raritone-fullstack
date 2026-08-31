@@ -16,31 +16,74 @@ function toCatalogProduct(product) {
 }
 async function postProducts(req, res) {
   try {
-    const { productId, name, category, price, description, brand, stock } =
-      req.body;
-    if (!req.file) {
-      return res.status(400).json({
-        message: "Product Image is required",
+    if (!req.user?.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
       });
     }
-    const imageResult = await uploadFile(req.file.buffer);
-    const product = await Product.create({
+
+    const {
       productId,
       name,
       category,
       price,
-      image:imageResult.url,
       description,
       brand,
       stock,
+    } = req.body;
+
+    if (
+      !productId ||
+      !name ||
+      !category ||
+      price === undefined ||
+      !description ||
+      !brand
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "All product details are required",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Product Image is required",
+      });
+    }
+
+    const imageResult = await uploadFile(req.file.buffer);
+
+    const productData = {
+      productId,
+      name,
+      category,
+      price,
+      image: imageResult.url,
+      description,
+      brand,
+      stock: stock || 0,
+    };
+
+    // Automatically assign the logged-in vendor as product owner
+    if (req.user.role === "vendor") {
+      productData.vendorId = req.user.id;
+    }
+
+    const product = await Product.create(productData);
+
+    return res.status(201).json({
+      success: true,
+      message: "Product created successfully",
+      product,
     });
-    res.status(201).json({
-        message:"Product created successfully",
-        product
-    })
   } catch (error) {
-    console.log(error);
-    res.status(500).json({
+    console.error("CREATE PRODUCT ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
       message: "Failed to create the product",
       error: error.message,
     });
