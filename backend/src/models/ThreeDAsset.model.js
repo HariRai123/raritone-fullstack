@@ -55,7 +55,16 @@ const threeDAssetSchema = new mongoose.Schema(
       type: String,
       default: "3d-v1",
     },
-
+    source:{
+      type:String,
+      default:"ai_ml",
+      trim:true,
+    },
+    license:{
+      type:String,
+      default:"",
+      trim:true
+    },
     status: {
       type: String,
       enum: [
@@ -72,6 +81,7 @@ const threeDAssetSchema = new mongoose.Schema(
     rejectionReason: {
       type: String,
       default: "",
+      trim:true,
     },
 
     generatedAt: {

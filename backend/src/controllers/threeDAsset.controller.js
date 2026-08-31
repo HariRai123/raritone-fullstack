@@ -46,6 +46,7 @@ async function createThreeDAsset(req, res) {
         "3D asset file is required.",
       );
     }
+
     if (req.file.size > 25 * 1024 * 1024) {
       return errorResponse(
         res,
@@ -54,7 +55,13 @@ async function createThreeDAsset(req, res) {
         "3D asset size must be 25 MB or smaller.",
       );
     }
-    const { productId, modelVersion } = req.body;
+
+    const {
+      productId,
+      modelVersion,
+      source,
+      license,
+    } = req.body;
 
     if (!productId) {
       return errorResponse(
@@ -79,7 +86,12 @@ async function createThreeDAsset(req, res) {
       .lean();
 
     if (!product) {
-      return errorResponse(res, 404, "PRODUCT_NOT_FOUND", "Product not found.");
+      return errorResponse(
+        res,
+        404,
+        "PRODUCT_NOT_FOUND",
+        "Product not found.",
+      );
     }
 
     const format = getAssetFormat(req.file.originalname);
@@ -93,7 +105,10 @@ async function createThreeDAsset(req, res) {
       );
     }
 
-    const validation = await validateThreeDAsset(req.file.buffer, format);
+    const validation = await validateThreeDAsset(
+      req.file.buffer,
+      format,
+    );
 
     if (!validation.valid) {
       return errorResponse(
@@ -101,6 +116,28 @@ async function createThreeDAsset(req, res) {
         400,
         "INVALID_3D_ASSET",
         "The uploaded 3D asset is invalid.",
+      );
+    }
+
+    const duplicateAsset = await ThreeDAsset.findOne({
+      productId,
+      status: {
+        $in: [
+          "generated",
+          "validating",
+          "pending_review",
+          "approved",
+          "published",
+        ],
+      },
+    });
+
+    if (duplicateAsset) {
+      return errorResponse(
+        res,
+        409,
+        "DUPLICATE_ASSET",
+        "An active 3D asset already exists for this product.",
       );
     }
 
@@ -125,10 +162,13 @@ async function createThreeDAsset(req, res) {
       productId,
       vendorId: req.user.id,
       assetUrl: uploadResult.url,
+      thumbnailUrl: null,
       format,
       polygonCount: validation.polygonCount,
       fileSize: req.file.size,
       modelVersion: modelVersion || "3d-v1",
+      source: source || "ai_ml",
+      license: license || "",
       status: "pending_review",
       generatedAt: new Date(),
     });
@@ -163,24 +203,36 @@ async function getThreeDAssetById(req, res) {
 
     const { id } = req.params;
 
-    const query = mongoose.isValidObjectId(id) ? { _id: id } : { assetId: id };
+    const query = mongoose.isValidObjectId(id)
+      ? { _id: id }
+      : { assetId: id };
 
     const isPrivileged = ["admin", "reviewer"].includes(
       String(req.user.role || "").toLowerCase(),
     );
 
     if (!isPrivileged) {
-      query.status = "approved";
+      query.status = {
+        $in: ["approved", "published"],
+      };
     }
 
     const asset = await ThreeDAsset.findOne(query)
-      .populate("productId", "name brand image price category")
+      .populate(
+        "productId",
+        "name brand image price category",
+      )
       .populate("vendorId", "name email")
       .populate("reviewedBy", "name email")
       .lean();
 
     if (!asset) {
-      return errorResponse(res, 404, "ASSET_NOT_FOUND", "3D asset not found.");
+      return errorResponse(
+        res,
+        404,
+        "ASSET_NOT_FOUND",
+        "3D asset not found.",
+      );
     }
 
     return res.status(200).json({
@@ -214,19 +266,23 @@ async function getProductThreeDAsset(req, res) {
 
     const asset = await ThreeDAsset.findOne({
       productId,
-      status: "approved",
+      status: {
+        $in: ["approved", "published"],
+      },
     })
-      .populate("productId", "name brand image price category")
+      .populate(
+        "productId",
+        "name brand image price category",
+      )
       .lean();
 
     if (!asset) {
-      return res.status(404).json({
-        success: false,
-        error: {
-          code: "THREED_ASSET_NOT_AVAILABLE",
-          message: "No approved 3D asset is available for this product.",
-        },
-      });
+      return errorResponse(
+        res,
+        404,
+        "THREED_ASSET_NOT_AVAILABLE",
+        "No approved 3D asset is available for this product.",
+      );
     }
 
     return res.status(200).json({
@@ -234,13 +290,16 @@ async function getProductThreeDAsset(req, res) {
       asset,
     });
   } catch (error) {
-    console.error("GET PRODUCT 3D ASSET ERROR:", error);
+    console.error(
+      "GET PRODUCT 3D ASSET ERROR:",
+      error,
+    );
 
     return errorResponse(
       res,
       500,
       "ASSET_FETCH_FAILED",
-      "Unable to fetch product 3D asset.",
+      "Unable to fetch 3D asset.",
     );
   }
 }
@@ -280,7 +339,12 @@ async function reviewThreeDAsset(req, res) {
     const asset = await ThreeDAsset.findById(id);
 
     if (!asset) {
-      return errorResponse(res, 404, "ASSET_NOT_FOUND", "3D asset not found.");
+      return errorResponse(
+        res,
+        404,
+        "ASSET_NOT_FOUND",
+        "3D asset not found.",
+      );
     }
 
     if (asset.status !== "pending_review") {
@@ -292,7 +356,10 @@ async function reviewThreeDAsset(req, res) {
       );
     }
 
-    if (status === "rejected" && !String(reason || "").trim()) {
+    if (
+      status === "rejected" &&
+      !String(reason || "").trim()
+    ) {
       return errorResponse(
         res,
         400,
@@ -302,7 +369,12 @@ async function reviewThreeDAsset(req, res) {
     }
 
     asset.status = status;
-    asset.rejectionReason = status === "rejected" ? String(reason).trim() : "";
+
+    asset.rejectionReason =
+      status === "rejected"
+        ? String(reason).trim()
+        : "";
+
     asset.reviewedAt = new Date();
     asset.reviewedBy = req.user.id;
 
@@ -317,7 +389,10 @@ async function reviewThreeDAsset(req, res) {
       asset,
     });
   } catch (error) {
-    console.error("REVIEW 3D ASSET ERROR:", error);
+    console.error(
+      "REVIEW 3D ASSET ERROR:",
+      error,
+    );
 
     return errorResponse(
       res,
@@ -340,7 +415,10 @@ async function getAllThreeDAssets(req, res) {
     }
 
     const assets = await ThreeDAsset.find({})
-      .populate("productId", "name brand image price category")
+      .populate(
+        "productId",
+        "name brand image price category",
+      )
       .populate("vendorId", "name email")
       .populate("reviewedBy", "name email")
       .sort({ createdAt: -1 })
@@ -351,7 +429,10 @@ async function getAllThreeDAssets(req, res) {
       assets,
     });
   } catch (error) {
-    console.error("GET ALL 3D ASSETS ERROR:", error);
+    console.error(
+      "GET ALL 3D ASSETS ERROR:",
+      error,
+    );
 
     return errorResponse(
       res,

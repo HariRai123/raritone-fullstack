@@ -10,7 +10,7 @@ const {
   getProductThreeDAsset,
   reviewThreeDAsset,
   getAllThreeDAssets,
-} = require("../controllers/threeDAsset.controller")
+} = require("../controllers/threeDAsset.controller");
 
 const router = express.Router();
 
