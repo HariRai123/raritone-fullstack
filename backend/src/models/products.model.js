@@ -1,56 +1,96 @@
 const mongoose = require("mongoose");
 
-const productSchema=new mongoose.Schema({
-    productId:{
-        type:String,
-        required:true,
-        trim:true,
-        unique:true
+const productSchema = new mongoose.Schema(
+  {
+    productId: {
+      type: String,
+      required: true,
+      trim: true,
+      unique: true,
     },
-    name:{
-        type:String,
-        required:true,
-        trim:true,
+
+    name: {
+      type: String,
+      required: true,
+      trim: true,
     },
-    category:{
-        type:String,
-        required:true,
-        trim:true,
+
+    gender: {
+      type: String,
+      required: true,
+      enum: ["Women", "Men", "Kids", "Unisex"],
+      index: true,
     },
-    price:{
-        type:Number,
-        required:true,
-        min:0,
+
+    category: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true,
     },
-    description:{
-        type:String,
-        required:true,
-        trim:true,
+
+    subcategory: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true,
     },
-    image:{
-        type:String,
-        required:true,
+
+    price: {
+      type: Number,
+      required: true,
+      min: 0,
     },
-    brand:{
-        type:String,
-        required:true,
-        trim:true,
+
+    description: {
+      type: String,
+      required: true,
+      trim: true,
     },
-    stock:{
-        type:Number,
-        required:true,
-        min:0,
-        default:0
+
+    image: {
+      type: String,
+      required: true,
     },
-     vendorId: {
+
+    brand: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    stock: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+    },
+
+    discount: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 0,
+    },
+
+    vendorId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
       index: true,
     },
-},{timestamps:true}
+  },
+  {
+    timestamps: true,
+  }
 );
 
-const Product= mongoose.model("Product",productSchema);
+productSchema.index({
+  gender: 1,
+  category: 1,
+  subcategory: 1,
+});
 
-module.exports=Product;
+const Product = mongoose.model("Product", productSchema);
+
+module.exports = Product;

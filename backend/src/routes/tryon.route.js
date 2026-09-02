@@ -10,23 +10,58 @@ const {
 } = require("../controllers/tryon.controller");
 
 const authMiddleware = require("../middleware/auth.middleware");
-
 const { handleImageUpload } = require("../middleware/upload.middleware");
 
 const router = express.Router();
 
-router.post("/session", authMiddleware, handleImageUpload, createTryOn);
+/*
+ * POST /api/tryon
+ *
+ * Form-data:
+ * - productId      -> Text
+ * - person_image   -> File
+ */
+router.post(
+  "/",
+  authMiddleware,
+  handleImageUpload("person_image"),
+  createTryOn
+);
 
-router.post("/", authMiddleware, handleImageUpload, createTryOn);
+/*
+ * Try-on session APIs
+ */
+router.get(
+  "/session/:id",
+  authMiddleware,
+  getTryOnSessionById
+);
 
-router.get("/session/:id", authMiddleware, getTryOnSessionById);
+router.post(
+  "/session/:id/retry",
+  authMiddleware,
+  retryTryOnSession
+);
 
-router.post("/session/:id/retry", authMiddleware, retryTryOnSession);
+/*
+ * History
+ */
+router.get(
+  "/history",
+  authMiddleware,
+  getTryOnHistory
+);
 
-router.get("/history", authMiddleware, getTryOnHistory);
+router.get(
+  "/history/:id",
+  authMiddleware,
+  getTryOnResultById
+);
 
-router.get("/history/:id", authMiddleware, getTryOnResultById);
-
-router.get("/my-results", authMiddleware, getMyTryOnResults);
+router.get(
+  "/my-results",
+  authMiddleware,
+  getMyTryOnResults
+);
 
 module.exports = router;

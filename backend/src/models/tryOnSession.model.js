@@ -14,9 +14,12 @@ const tryOnSessionSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    inputImageReference: { type: String, default:null},
+    inputImageReference: { type: String, default: null },
     resultImageReference: { type: String, default: null },
-    aiModelVersion: { type: String, default: "pose-v1" },
+    aiModelVersion: {
+      type: String,
+      default: "raritone-vton-1.0",
+    },
     status: {
       type: String,
       enum: ["pending", "processing", "completed", "failed"],
@@ -63,6 +66,10 @@ const tryOnSessionSchema = new mongoose.Schema(
     threeDModelVersion: {
       type: String,
       default: null,
+    },
+    retryCount: {
+      type: Number,
+      default: 0,
     },
   },
   { timestamps: true, collection: "tryOnSessions" },

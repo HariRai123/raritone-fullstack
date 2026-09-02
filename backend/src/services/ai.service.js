@@ -1,11 +1,16 @@
 const axios = require("axios");
 const FormData = require("form-data");
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://127.0.0.1:8000";
+const AI_SERVICE_URL =
+  process.env.AI_SERVICE_URL ||
+  "https://siddhartha-alexander--raritone-vton-fastapi-app.modal.run";
 
-const AI_VTON_ENDPOINT = process.env.AI_VTON_ENDPOINT || "/try-on";
+const AI_VTON_ENDPOINT =
+  process.env.AI_VTON_ENDPOINT ||
+  "/api/ai/tryon";
 
-const AI_TIMEOUT = Number(process.env.AI_TIMEOUT_MS) || 120000;
+const AI_TIMEOUT =
+  Number(process.env.AI_TIMEOUT_MS) || 180000;
 
 const AI_API = axios.create({
   baseURL: AI_SERVICE_URL,
@@ -28,10 +33,7 @@ async function downloadImage(url, label) {
   if (!url) {
     throw new AIServiceError(
       "INVALID_AI_INPUT",
-      `${label} image URL is missing.`,
-      {
-        retryable: false,
-      },
+      `${label} image URL is missing.`
     );
   }
 
@@ -42,22 +44,21 @@ async function downloadImage(url, label) {
       maxContentLength: 15 * 1024 * 1024,
     });
 
-    const contentType = response.headers["content-type"] || "";
+    const contentType =
+      response.headers["content-type"] || "";
 
     if (!contentType.startsWith("image/")) {
       throw new AIServiceError(
         "INVALID_AI_INPUT",
-        `${label} image is not a valid image.`,
-        {
-          retryable: false,
-        },
+        `${label} image is not a valid image.`
       );
     }
 
     if (!response.data || response.data.length === 0) {
-      throw new AIServiceError("INVALID_AI_INPUT", `${label} image is empty.`, {
-        retryable: false,
-      });
+      throw new AIServiceError(
+        "INVALID_AI_INPUT",
+        `${label} image is empty.`
+      );
     }
 
     return {
@@ -69,14 +70,17 @@ async function downloadImage(url, label) {
       throw error;
     }
 
-    if (error.code === "ECONNABORTED" || error.code === "ETIMEDOUT") {
+    if (
+      error.code === "ECONNABORTED" ||
+      error.code === "ETIMEDOUT"
+    ) {
       throw new AIServiceError(
         "AI_TIMEOUT",
         `${label} image download timed out.`,
         {
           retryable: false,
           originalError: error,
-        },
+        }
       );
     }
 
@@ -86,7 +90,7 @@ async function downloadImage(url, label) {
       {
         retryable: false,
         originalError: error,
-      },
+      }
     );
   }
 }
@@ -124,7 +128,6 @@ async function requestTryOn({
 }) {
   const [person, garment] = await Promise.all([
     downloadImage(personImageUrl, "Person"),
-
     downloadImage(garmentImageUrl, "Garment"),
   ]);
 
@@ -140,71 +143,190 @@ async function requestTryOn({
     contentType: garment.contentType,
   });
 
-  form.append("category", getVtonCategory(productCategory));
-
   try {
-    const response = await AI_API.post(AI_VTON_ENDPOINT, form, {
-      headers: form.getHeaders(),
+    console.log("=================================");
+    console.log("Raritone VTON AI Request");
+    console.log("AI URL:", AI_SERVICE_URL);
+    console.log("Endpoint:", AI_VTON_ENDPOINT);
+    console.log("Person image:", person.buffer.length);
+    console.log("Garment image:", garment.buffer.length);
+    console.log("=================================");
 
-      responseType: "arraybuffer",
+    const response = await AI_API.post(
+      AI_VTON_ENDPOINT,
+      form,
+      {
+        headers: {
+          ...form.getHeaders(),
+        },
+        timeout: AI_TIMEOUT,
+        maxContentLength: 30 * 1024 * 1024,
+        maxBodyLength: 30 * 1024 * 1024,
+      }
+    );
 
-      maxContentLength: 30 * 1024 * 1024,
+    console.log(
+      "AI HTTP STATUS:",
+      response.status
+    );
 
-      maxBodyLength: 30 * 1024 * 1024,
-    });
+    console.log(
+      "AI RESPONSE:",
+      JSON.stringify(response.data, null, 2)
+    );
 
-    if (response.status < 200 || response.status >= 300) {
+    const data = response.data;
+
+    if (!data) {
+      throw new AIServiceError(
+        "AI_INVALID_RESPONSE",
+        "AI service returned an empty response.",
+        {
+          retryable: false,
+          status: response.status,
+        }
+      );
+    }
+
+    if (data.success === false) {
       throw new AIServiceError(
         "TRYON_FAILED",
-        "The AI service failed to generate the try-on result.",
+        data.error ||
+          data.detail ||
+          data.message ||
+          "AI service failed to generate try-on result.",
         {
           retryable: true,
           status: response.status,
-        },
+        }
       );
     }
 
-    const contentType = response.headers["content-type"] || "";
+    const requestId =
+      data.request_id ||
+      data.requestId ||
+      data.id;
 
-    if (!contentType.startsWith("image/")) {
+    if (!requestId) {
       throw new AIServiceError(
         "AI_INVALID_RESPONSE",
-        "The AI service returned an invalid result.",
+        "AI service did not return a request ID.",
         {
           retryable: false,
-        },
+          status: response.status,
+        }
       );
     }
-    if (!response.data || response.data.length === 0) {
+
+    let resultUrl = null;
+
+    if (data.result) {
+      resultUrl = new URL(
+        data.result,
+        AI_SERVICE_URL
+      ).toString();
+    }
+
+    if (data.result_url) {
+      resultUrl = new URL(
+        data.result_url,
+        AI_SERVICE_URL
+      ).toString();
+    }
+
+    if (data.resultUrl) {
+      resultUrl = new URL(
+        data.resultUrl,
+        AI_SERVICE_URL
+      ).toString();
+    }
+
+    if (!resultUrl) {
+      resultUrl =
+        new URL(
+          `/api/ai/tryon/result/${requestId}`,
+          AI_SERVICE_URL
+        ).toString();
+    }
+
+    console.log(
+      "AI REQUEST ID:",
+      requestId
+    );
+
+    console.log(
+      "AI RESULT URL:",
+      resultUrl
+    );
+
+    const resultResponse =
+      await axios.get(resultUrl, {
+        responseType: "arraybuffer",
+        timeout: AI_TIMEOUT,
+        maxContentLength: 30 * 1024 * 1024,
+      });
+
+    const resultContentType =
+      resultResponse.headers["content-type"] || "";
+
+    if (!resultContentType.startsWith("image/")) {
       throw new AIServiceError(
         "AI_INVALID_RESPONSE",
-        "The AI service returned an empty result.",
+        "AI service did not return an image result.",
         {
           retryable: false,
-        },
+          status: resultResponse.status,
+        }
+      );
+    }
+
+    if (
+      !resultResponse.data ||
+      resultResponse.data.length === 0
+    ) {
+      throw new AIServiceError(
+        "AI_INVALID_RESPONSE",
+        "AI service returned an empty result image.",
+        {
+          retryable: false,
+        }
       );
     }
 
     return {
-      buffer: Buffer.from(response.data),
+      requestId,
 
-      contentType,
+      buffer: Buffer.from(
+        resultResponse.data
+      ),
 
-      modelVersion: process.env.AI_MODEL_VERSION || "vton-v1",
+      contentType: resultContentType,
+
+      processingTime:
+        data.processing_time ||
+        data.processingTime ||
+        null,
+
+      modelVersion:
+        process.env.AI_MODEL_VERSION ||
+        "raritone-vton-2.0",
     };
   } catch (error) {
     if (error instanceof AIServiceError) {
       throw error;
     }
 
-    if (error.code === "ECONNABORTED" || error.code === "ETIMEDOUT") {
+    if (
+      error.code === "ECONNABORTED" ||
+      error.code === "ETIMEDOUT"
+    ) {
       throw new AIServiceError(
         "AI_TIMEOUT",
         "The AI service took too long to respond.",
         {
           retryable: true,
           originalError: error,
-        },
+        }
       );
     }
 
@@ -215,9 +337,15 @@ async function requestTryOn({
         {
           retryable: true,
           originalError: error,
-        },
+        }
       );
     }
+
+    console.error(
+      "AI HTTP ERROR:",
+      error.response.status,
+      error.response.data
+    );
 
     if (error.response.status >= 500) {
       throw new AIServiceError(
@@ -227,7 +355,7 @@ async function requestTryOn({
           retryable: true,
           status: error.response.status,
           originalError: error,
-        },
+        }
       );
     }
 
@@ -238,7 +366,7 @@ async function requestTryOn({
         retryable: false,
         status: error.response.status,
         originalError: error,
-      },
+      }
     );
   }
 }
@@ -252,9 +380,15 @@ async function generateTryOn({
 
   let lastError = null;
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+  for (
+    let attempt = 1;
+    attempt <= MAX_ATTEMPTS;
+    attempt++
+  ) {
     try {
-      console.log(`AI TRY-ON ATTEMPT ${attempt}/${MAX_ATTEMPTS}`);
+      console.log(
+        `AI TRY-ON ATTEMPT ${attempt}/${MAX_ATTEMPTS}`
+      );
 
       return await requestTryOn({
         personImageUrl,
@@ -264,23 +398,24 @@ async function generateTryOn({
     } catch (error) {
       lastError = error;
 
-      console.error(`AI TRY-ON ATTEMPT ${attempt} FAILED:`, {
-        code: error.code || "UNKNOWN_ERROR",
-
-        message: error.message,
-
-        retryable: error.retryable,
-      });
+      console.error(
+        `AI TRY-ON ATTEMPT ${attempt} FAILED:`,
+        {
+          code: error.code,
+          message: error.message,
+          retryable: error.retryable,
+        }
+      );
 
       if (!error.retryable) {
         throw error;
       }
 
-      if (attempt >= MAX_ATTEMPTS) {
-        break;
+      if (attempt < MAX_ATTEMPTS) {
+        console.log(
+          "Retrying AI try-on request..."
+        );
       }
-
-      console.log("Retrying AI try-on request once...");
     }
   }
 
@@ -289,20 +424,31 @@ async function generateTryOn({
 
 async function checkAIHealth() {
   try {
-    const response = await AI_API.get("/health", {
-      timeout: 10000,
-    });
+    const response = await AI_API.get(
+      "/api/ai/health",
+      {
+        timeout: 10000,
+      }
+    );
+
+    console.log(
+      "AI HEALTH:",
+      response.data
+    );
 
     return response.data;
   } catch (error) {
-    if (error.code === "ECONNABORTED" || error.code === "ETIMEDOUT") {
+    if (
+      error.code === "ECONNABORTED" ||
+      error.code === "ETIMEDOUT"
+    ) {
       throw new AIServiceError(
         "AI_TIMEOUT",
         "AI service health check timed out.",
         {
           retryable: false,
           originalError: error,
-        },
+        }
       );
     }
 
@@ -312,7 +458,7 @@ async function checkAIHealth() {
       {
         retryable: false,
         originalError: error,
-      },
+      }
     );
   }
 }

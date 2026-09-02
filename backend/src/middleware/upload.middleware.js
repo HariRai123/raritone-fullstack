@@ -133,40 +133,46 @@ async function validateImageFile(req, res, next) {
   }
 }
 
-function handleImageUpload(req, res, next) {
-  upload.single("image")(req, res, (error) => {
-    if (error instanceof multer.MulterError) {
-      if (error.code === "LIMIT_FILE_SIZE") {
+function handleImageUpload(fieldName = "image") {
+  return (req, res, next) => {
+    upload.single(fieldName)(req, res, (error) => {
+      if (error instanceof multer.MulterError) {
+        if (error.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({
+            success: false,
+            error: {
+              code: "IMAGE_TOO_LARGE",
+              message: "Image size must be less than 10 MB.",
+            },
+          });
+        }
+
+        console.error("MULTER ERROR:", error);
+
         return res.status(400).json({
           success: false,
           error: {
-            code: "IMAGE_TOO_LARGE",
-            message: "Image size must be less than 10 MB.",
+            code: "IMAGE_UPLOAD_ERROR",
+            message: error.message || "Unable to upload the image.",
           },
         });
       }
 
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: "IMAGE_UPLOAD_ERROR",
-          message: "Unable to upload the image.",
-        },
-      });
-    }
+      if (error) {
+        console.error("IMAGE UPLOAD ERROR:", error);
 
-    if (error) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: "INVALID_IMAGE",
-          message: error.message,
-        },
-      });
-    }
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: "INVALID_IMAGE",
+            message: error.message,
+          },
+        });
+      }
 
-    validateImageFile(req, res, next);
-  });
+      validateImageFile(req, res, next);
+    });
+  };
 }
 
 module.exports = {

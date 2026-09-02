@@ -2,9 +2,6 @@ const uploadFile = require("../services/storage.service");
 const Product = require("../models/products.model");
 
 function optimizeImageUrl(url) {
-  // Return the original ImageKit URL.
-  // The previous /tr:w-600,q-72,f-auto path format was generating
-  // 404 responses for the current ImageKit URLs.
   return url;
 }
 
@@ -14,6 +11,7 @@ function toCatalogProduct(product) {
     image: optimizeImageUrl(product.image),
   };
 }
+
 async function postProducts(req, res) {
   try {
     if (!req.user?.id) {
@@ -26,17 +24,22 @@ async function postProducts(req, res) {
     const {
       productId,
       name,
+      gender,
       category,
+      subcategory,
       price,
       description,
       brand,
       stock,
+      discount,
     } = req.body;
 
     if (
       !productId ||
       !name ||
+      !gender ||
       !category ||
+      !subcategory ||
       price === undefined ||
       !description ||
       !brand
@@ -59,15 +62,17 @@ async function postProducts(req, res) {
     const productData = {
       productId,
       name,
+      gender,
       category,
-      price,
+      subcategory,
+      price: Number(price),
       image: imageResult.url,
       description,
       brand,
-      stock: stock || 0,
+      stock: Number(stock) || 0,
+      discount: Number(discount) || 0,
     };
 
-    // Automatically assign the logged-in vendor as product owner
     if (req.user.role === "vendor") {
       productData.vendorId = req.user.id;
     }
@@ -90,112 +95,163 @@ async function postProducts(req, res) {
   }
 }
 
-async function getProducts(req,res){
-
-    try{
-        res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
-        const products= await Product.find()
-        .select("productId name category price image brand stock createdAt")
-        .sort({ createdAt: -1 })
-        .lean();
-      const catalogProducts = products.map(toCatalogProduct);
-        res.status(200).json({
-            message:"Products fetched successfully",
-            products: catalogProducts
-        })
-    }
-    catch(err)
-    {
-        console.log(err);
-        res.status(500).json({
-            message:"Failed to fetch products",
-            error:err.message
-        })
-    }
-}
-
-async function getProductById(req,res){
-    try {
-        const {id}=req.params ;
-        const product= await Product.findById(id);
-        if(!product)
-        {
-            res.status(404).json({
-                message:"Product not found"
-            })
-        }
-      const responseProduct = product.toObject();
-      responseProduct.image = optimizeImageUrl(responseProduct.image);
-      return res.status(200).json({
-        message:"Product fetched successfully",
-        product: responseProduct
-      })
-    } catch (error) {
-        console.log(error);
-        res.status(500).json({
-            message:"Failed to fetch products",
-            error:error.message
-        })
-    }
-}
-
-async function updateProduct(req,res){
+async function getProducts(req, res) {
   try {
-    const {id}=req.params;
-     const { productId, name, category, price, description, brand, stock } =req.body;
-     const product=await Product.findById(id);
-     if(!product){
+    res.set(
+      "Cache-Control",
+      "public, max-age=60, stale-while-revalidate=300"
+    );
+
+    const products = await Product.find()
+      .select(
+        "productId name gender category subcategory price image brand stock discount createdAt"
+      )
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const catalogProducts = products.map(toCatalogProduct);
+
+    return res.status(200).json({
+      success: true,
+      message: "Products fetched successfully",
+      products: catalogProducts,
+    });
+  } catch (err) {
+    console.log(err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch products",
+      error: err.message,
+    });
+  }
+}
+
+async function getProductById(req, res) {
+  try {
+    const { id } = req.params;
+
+    const product = await Product.findById(id).lean();
+
+    if (!product) {
       return res.status(404).json({
-        message:"Product not found"
-      })
-     }
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    product.image = optimizeImageUrl(product.image);
+
+    return res.status(200).json({
+      success: true,
+      message: "Product fetched successfully",
+      product,
+    });
+  } catch (error) {
+    console.log(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch product",
+      error: error.message,
+    });
+  }
+}
+
+async function updateProduct(req, res) {
+  try {
+    const { id } = req.params;
+
+    const {
+      productId,
+      name,
+      gender,
+      category,
+      subcategory,
+      price,
+      description,
+      brand,
+      stock,
+      discount,
+    } = req.body;
+
+    const product = await Product.findById(id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
     product.productId = productId ?? product.productId;
     product.name = name ?? product.name;
+    product.gender = gender ?? product.gender;
     product.category = category ?? product.category;
-    product.price = price ?? product.price;
+    product.subcategory = subcategory ?? product.subcategory;
+    product.price = price !== undefined ? Number(price) : product.price;
     product.description = description ?? product.description;
     product.brand = brand ?? product.brand;
-    product.stock = stock ?? product.stock;
-     if(req.file)
-     {
-      const imageResult=await uploadFile(req.file.buffer);
-      product.image=imageResult.url;
-     }
-     const updatedProduct=await product.save();
-     return res.status(200).json({
-      message:"Product updated successfully",
-      product:updatedProduct
-     })
+    product.stock = stock !== undefined ? Number(stock) : product.stock;
+    product.discount =
+      discount !== undefined ? Number(discount) : product.discount;
+
+    if (req.file) {
+      const imageResult = await uploadFile(req.file.buffer);
+      product.image = imageResult.url;
+    }
+
+    const updatedProduct = await product.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Product updated successfully",
+      product: updatedProduct,
+    });
   } catch (error) {
-     console.log(error);
-        res.status(500).json({
-            message:"Failed to update products",
-            error:error.message
-        })
+    console.log(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update product",
+      error: error.message,
+    });
   }
 }
 
-async function deleteProduct(req,res){
- try {
-  const {id}= req.params;
-  const product= await Product.findByIdAndDelete(id);
-  if(!product)
-  {
-    return res.status(404).json({
-      message:"Product not found"
-    })
+async function deleteProduct(req, res) {
+  try {
+    const { id } = req.params;
+
+    const product = await Product.findByIdAndDelete(id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Product deleted successfully",
+      product,
+    });
+  } catch (error) {
+    console.log(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete product",
+      error: error.message,
+    });
   }
-  return res.status(200).json({
-    message:"Product deleted successfully",
-    product,
-  })
- } catch (error) {
-   console.log(error);
-        res.status(500).json({
-            message:"Failed to delete product",
-            error:error.message
-        })
- }
 }
 
-module.exports = { postProducts,getProducts,getProductById ,updateProduct,deleteProduct};
+module.exports = {
+  postProducts,
+  getProducts,
+  getProductById,
+  updateProduct,
+  deleteProduct,
+};
