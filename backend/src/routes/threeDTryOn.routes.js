@@ -15,6 +15,7 @@ router.post(
   authMiddleware,
   createThreeDTryOnSession,
 );
+//router.get
 
 router.get(
   "/session/:id",
