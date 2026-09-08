@@ -33,14 +33,19 @@ async function authMiddleWare(req, res, next) {
             ? "phone"
             : "password",
     };
-    next();
+      next();
   } catch (error) {
-    console.error("Firebase authentication error:", error.message);
+    console.error("========== FIREBASE AUTH ERROR ==========");
+    console.error("Code:", error.code);
+    console.error("Message:", error.message);
+    console.error("=========================================");
 
     return res.status(401).json({
       message: "Invalid or expired Firebase token",
+      code: error.code || "unknown",
     });
   }
 }
 
 module.exports = authMiddleWare;
+
