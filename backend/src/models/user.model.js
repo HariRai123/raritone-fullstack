@@ -1,8 +1,14 @@
 const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
 
 const userSchema = new mongoose.Schema(
   {
+    firebaseUid: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
+
     name: {
       type: String,
       required: true,
@@ -11,16 +17,24 @@ const userSchema = new mongoose.Schema(
 
     email: {
       type: String,
-      required: true,
-      unique: true,
       lowercase: true,
       trim: true,
+      sparse: true,
+      unique: true,
     },
 
+    phone: {
+      type: String,
+      trim: true,
+      sparse: true,
+      unique: true,
+    },
+
+    // Temporary field for existing users during migration.
+    // Firebase will handle passwords for new authentication.
     password: {
       type: String,
-      required: true,
-      minlength: 6,
+      select: false,
     },
 
     role: {
@@ -33,20 +47,22 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+
+    provider: {
+      type: String,
+      enum: ["password", "google", "phone"],
+      required: true,
+    },
+
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,
   },
 );
-
-// Password hashing middleware
-userSchema.pre("save", async function () {
-  if (!this.isModified("password")) {
-    return;
-  }
-
-  this.password = await bcrypt.hash(this.password, 10);
-});
 
 const User = mongoose.model("User", userSchema);
 
