@@ -1,11 +1,30 @@
-const { getApps, initializeApp, applicationDefault } = require("firebase-admin/app");
+const {
+  getApps,
+  initializeApp,
+  cert,
+} = require("firebase-admin/app");
+
 const { getAuth } = require("firebase-admin/auth");
+
+const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+
+if (
+  !process.env.FIREBASE_PROJECT_ID ||
+  !process.env.FIREBASE_CLIENT_EMAIL ||
+  !privateKey
+) {
+  throw new Error("Missing Firebase Admin environment variables");
+}
 
 const firebaseApp =
   getApps().length > 0
     ? getApps()[0]
     : initializeApp({
-        credential: applicationDefault(),
+        credential: cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey,
+        }),
       });
 
 const firebaseAuth = getAuth(firebaseApp);
