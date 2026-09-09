@@ -17,6 +17,7 @@ const orderItemSchema = new mongoose.Schema(
     image: {
       type: String,
       required: true,
+      default: "",
     },
 
     price: {
@@ -98,6 +99,7 @@ const orderSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
     },
 
     items: {
@@ -133,6 +135,7 @@ const orderSchema = new mongoose.Schema(
       ],
 
       default: "pending",
+      index: true,
     },
 
     paymentStatus: {
@@ -146,6 +149,7 @@ const orderSchema = new mongoose.Schema(
       ],
 
       default: "pending",
+      index: true,
     },
 
     paymentMethod: {

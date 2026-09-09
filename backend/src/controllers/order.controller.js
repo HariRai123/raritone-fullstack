@@ -3,8 +3,23 @@ const mongoose = require("mongoose");
 const Order = require("../models/order.model");
 const Product = require("../models/products.model");
 
+/*
+|--------------------------------------------------------------------------
+| Create Order
+|--------------------------------------------------------------------------
+|
+| POST /api/orders
+|
+*/
+
 async function createOrder(req, res) {
+  const session = await mongoose.startSession();
+
   try {
+    // --------------------------------------------------
+    // Authentication
+    // --------------------------------------------------
+
     if (!req.user?.id) {
       return res.status(401).json({
         message: "Unauthorized user",
@@ -14,14 +29,12 @@ async function createOrder(req, res) {
     const {
       items,
       shippingAddress,
-      paymentMethod = "online",
+      paymentMethod = "cod",
     } = req.body;
 
-    /*
-    |--------------------------------------------------------------------------
-    | Validate Items
-    |--------------------------------------------------------------------------
-    */
+    // --------------------------------------------------
+    // Validate Items
+    // --------------------------------------------------
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
@@ -29,11 +42,9 @@ async function createOrder(req, res) {
       });
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Validate Shipping Address
-    |--------------------------------------------------------------------------
-    */
+    // --------------------------------------------------
+    // Validate Shipping Address
+    // --------------------------------------------------
 
     if (
       !shippingAddress ||
@@ -69,11 +80,9 @@ async function createOrder(req, res) {
       }
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Validate Email
-    |--------------------------------------------------------------------------
-    */
+    // --------------------------------------------------
+    // Validate Email
+    // --------------------------------------------------
 
     const email = String(
       shippingAddress.email
@@ -81,19 +90,15 @@ async function createOrder(req, res) {
       .trim()
       .toLowerCase();
 
-    if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-    ) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({
         message: "Invalid email address",
       });
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Validate Phone
-    |--------------------------------------------------------------------------
-    */
+    // --------------------------------------------------
+    // Validate Phone
+    // --------------------------------------------------
 
     const phone = String(
       shippingAddress.phone
@@ -105,11 +110,9 @@ async function createOrder(req, res) {
       });
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Validate PIN
-    |--------------------------------------------------------------------------
-    */
+    // --------------------------------------------------
+    // Validate PIN
+    // --------------------------------------------------
 
     const pincode = String(
       shippingAddress.pincode
@@ -121,11 +124,9 @@ async function createOrder(req, res) {
       });
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Validate Payment Method
-    |--------------------------------------------------------------------------
-    */
+    // --------------------------------------------------
+    // Validate Payment Method
+    // --------------------------------------------------
 
     if (!["online", "cod"].includes(paymentMethod)) {
       return res.status(400).json({
@@ -133,11 +134,9 @@ async function createOrder(req, res) {
       });
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Process Products
-    |--------------------------------------------------------------------------
-    */
+    // --------------------------------------------------
+    // Prepare Products
+    // --------------------------------------------------
 
     const normalized = [];
 
@@ -148,11 +147,25 @@ async function createOrder(req, res) {
         });
       }
 
-      if (
-        !mongoose.isValidObjectId(
-          item.productId
-        )
-      ) {
+      /*
+      |--------------------------------------------------------------------------
+      | IMPORTANT
+      |--------------------------------------------------------------------------
+      |
+      | Mobile sends:
+      |
+      | RAR-SHO-001
+      |
+      | This is your application's productId,
+      | NOT MongoDB _id.
+      |
+      */
+
+      const productId = String(
+        item.productId
+      ).trim();
+
+      if (!productId) {
         return res.status(400).json({
           message: "Invalid product id",
         });
@@ -169,44 +182,46 @@ async function createOrder(req, res) {
         });
       }
 
-      const product = await Product.findById(
-        item.productId
-      ).lean();
+      // ------------------------------------------------
+      // Find Product Using productId
+      // ------------------------------------------------
+
+      const product = await Product.findOne({
+        productId,
+      }).session(session);
 
       if (!product) {
         return res.status(404).json({
-          message: `Product not found: ${item.productId}`,
+          message: `Product not found: ${productId}`,
         });
       }
 
-      if (
-        Number(product.stock) < quantity
-      ) {
+      // ------------------------------------------------
+      // Check Stock
+      // ------------------------------------------------
+
+      if (Number(product.stock) < quantity) {
         return res.status(400).json({
           message: `${product.name} does not have enough stock`,
         });
       }
 
-      /*
-      |--------------------------------------------------------------------------
-      | NEVER TRUST FRONTEND PRICE
-      |--------------------------------------------------------------------------
-      */
+      // ------------------------------------------------
+      // Never trust frontend price
+      // ------------------------------------------------
 
       normalized.push({
         product: product._id,
         name: product.name,
-        image: product.image,
+        image: product.image || "",
         price: Number(product.price),
         quantity,
       });
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Calculate Total From Database Prices
-    |--------------------------------------------------------------------------
-    */
+    // --------------------------------------------------
+    // Calculate Total
+    // --------------------------------------------------
 
     const total = normalized.reduce(
       (sum, item) =>
@@ -214,59 +229,15 @@ async function createOrder(req, res) {
       0
     );
 
-    /*
-    |--------------------------------------------------------------------------
-    | Create Order
-    |--------------------------------------------------------------------------
-    */
+    // --------------------------------------------------
+    // Start Transaction
+    // --------------------------------------------------
 
-    const order = await Order.create({
-      user: req.user.id,
+    session.startTransaction();
 
-      items: normalized,
-
-      shippingAddress: {
-        firstName: String(
-          shippingAddress.firstName
-        ).trim(),
-
-        lastName: String(
-          shippingAddress.lastName
-        ).trim(),
-
-        email,
-
-        phone,
-
-        address: String(
-          shippingAddress.address
-        ).trim(),
-
-        city: String(
-          shippingAddress.city
-        ).trim(),
-
-        state: String(
-          shippingAddress.state
-        ).trim(),
-
-        pincode,
-      },
-
-      total,
-
-      status: "pending",
-
-      paymentStatus: "pending",
-
-      paymentMethod,
-    });
-
-    /*
-    |--------------------------------------------------------------------------
-    | Reduce Stock
-    |--------------------------------------------------------------------------
-    */
+    // --------------------------------------------------
+    // Reduce Stock
+    // --------------------------------------------------
 
     for (const item of normalized) {
       const updatedProduct =
@@ -287,30 +258,82 @@ async function createOrder(req, res) {
 
           {
             new: true,
+            session,
           }
         );
 
       if (!updatedProduct) {
-        /*
-        | Stock changed while order was being processed.
-        */
-
-        await Order.findByIdAndDelete(
-          order._id
+        throw new Error(
+          "STOCK_CHANGED_DURING_ORDER"
         );
-
-        return res.status(409).json({
-          message:
-            "Stock changed while placing your order. Please try again.",
-        });
       }
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Get Final Order
-    |--------------------------------------------------------------------------
-    */
+    // --------------------------------------------------
+    // Create Order
+    // --------------------------------------------------
+
+    const createdOrders =
+      await Order.create(
+        [
+          {
+            user: req.user.id,
+
+            items: normalized,
+
+            shippingAddress: {
+              firstName: String(
+                shippingAddress.firstName
+              ).trim(),
+
+              lastName: String(
+                shippingAddress.lastName
+              ).trim(),
+
+              email,
+
+              phone,
+
+              address: String(
+                shippingAddress.address
+              ).trim(),
+
+              city: String(
+                shippingAddress.city
+              ).trim(),
+
+              state: String(
+                shippingAddress.state
+              ).trim(),
+
+              pincode,
+            },
+
+            total,
+
+            status: "pending",
+
+            paymentStatus: "pending",
+
+            paymentMethod,
+          },
+        ],
+        {
+          session,
+        }
+      );
+
+    const order = createdOrders[0];
+
+    // --------------------------------------------------
+    // Commit Transaction
+    // --------------------------------------------------
+
+    await session.commitTransaction();
+
+    // --------------------------------------------------
+    // Get Final Order
+    // --------------------------------------------------
 
     const populatedOrder =
       await Order.findById(order._id)
@@ -318,27 +341,53 @@ async function createOrder(req, res) {
           "user",
           "name email role"
         )
+        .populate(
+          "items.product",
+          "name brand image price category"
+        )
         .lean();
 
-    /*
-    |--------------------------------------------------------------------------
-    | Response
-    |--------------------------------------------------------------------------
-    */
+    // --------------------------------------------------
+    // Success
+    // --------------------------------------------------
 
     return res.status(201).json({
       message: "Order created successfully",
       order: populatedOrder,
     });
   } catch (error) {
+    // --------------------------------------------------
+    // Rollback
+    // --------------------------------------------------
+
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+
     console.error(
       "CREATE ORDER ERROR:",
       error
     );
 
+    if (
+      error.message ===
+      "STOCK_CHANGED_DURING_ORDER"
+    ) {
+      return res.status(409).json({
+        message:
+          "Stock changed while placing your order. Please try again.",
+      });
+    }
+
     return res.status(500).json({
       message: "Failed to place order",
+      error:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : undefined,
     });
+  } finally {
+    await session.endSession();
   }
 }
 
@@ -346,6 +395,9 @@ async function createOrder(req, res) {
 |--------------------------------------------------------------------------
 | Get My Orders
 |--------------------------------------------------------------------------
+|
+| GET /api/orders
+|
 */
 
 async function getMyOrders(req, res) {
@@ -363,9 +415,14 @@ async function getMyOrders(req, res) {
         "user",
         "name email"
       )
+      .populate(
+        "items.product",
+        "name brand image price category"
+      )
       .sort({
         createdAt: -1,
-      });
+      })
+      .lean();
 
     return res.status(200).json({
       message: "Orders fetched successfully",
@@ -385,8 +442,82 @@ async function getMyOrders(req, res) {
 
 /*
 |--------------------------------------------------------------------------
+| Get My Order By ID
+|--------------------------------------------------------------------------
+|
+| GET /api/orders/:id
+|
+*/
+
+async function getMyOrderById(req, res) {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({
+        message: "Unauthorized user",
+      });
+    }
+
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        message: "Invalid order ID",
+      });
+    }
+
+    const order = await Order.findOne({
+      _id: id,
+
+      /*
+      |--------------------------------------------------------------------------
+      | SECURITY
+      |--------------------------------------------------------------------------
+      |
+      | A user can only access their own order.
+      |
+      */
+
+      user: req.user.id,
+    })
+      .populate(
+        "user",
+        "name email"
+      )
+      .populate(
+        "items.product",
+        "name brand image price category"
+      )
+      .lean();
+
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Order fetched successfully",
+      order,
+    });
+  } catch (error) {
+    console.error(
+      "GET ORDER BY ID ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      message: "Failed to fetch order",
+    });
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
 | Get All Orders
 |--------------------------------------------------------------------------
+|
+| GET /api/orders/admin
+|
 */
 
 async function getAllOrders(req, res) {
@@ -396,9 +527,14 @@ async function getAllOrders(req, res) {
         "user",
         "name email role"
       )
+      .populate(
+        "items.product",
+        "name brand image price category"
+      )
       .sort({
         createdAt: -1,
-      });
+      })
+      .lean();
 
     return res.status(200).json({
       message: "All orders fetched successfully",
@@ -420,6 +556,9 @@ async function getAllOrders(req, res) {
 |--------------------------------------------------------------------------
 | Update Order Status
 |--------------------------------------------------------------------------
+|
+| PATCH /api/orders/admin/:id
+|
 */
 
 async function updateOrderStatus(req, res) {
@@ -459,10 +598,15 @@ async function updateOrderStatus(req, res) {
           new: true,
           runValidators: true,
         }
-      ).populate(
-        "user",
-        "name email role"
-      );
+      )
+        .populate(
+          "user",
+          "name email role"
+        )
+        .populate(
+          "items.product",
+          "name brand image price category"
+        );
 
     if (!order) {
       return res.status(404).json({
@@ -486,57 +630,10 @@ async function updateOrderStatus(req, res) {
   }
 }
 
-
-async function getMyOrderById(req, res) {
-  try {
-    if (!req.user?.id) {
-      return res.status(401).json({
-        message: "Unauthorized user",
-      });
-    }
-
-    const { id } = req.params;
-
-    if (!mongoose.isValidObjectId(id)) {
-      return res.status(400).json({
-        message: "Invalid order ID",
-      });
-    }
-
-    const order = await Order.findOne({
-      _id: id,
-      user: req.user.id,
-    })
-      .populate("user", "name email")
-      .populate(
-        "items.product",
-        "name brand image price category"
-      )
-      .lean();
-
-    if (!order) {
-      return res.status(404).json({
-        message: "Order not found",
-      });
-    }
-
-    return res.status(200).json({
-      message: "Order fetched successfully",
-      order,
-    });
-  } catch (error) {
-    console.error("GET ORDER BY ID ERROR:", error);
-
-    return res.status(500).json({
-      message: "Failed to fetch order",
-    });
-  }
-}
-
 module.exports = {
   createOrder,
   getMyOrders,
+  getMyOrderById,
   getAllOrders,
   updateOrderStatus,
-  getMyOrderById
 };

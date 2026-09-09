@@ -18,7 +18,7 @@ const router = express.Router();
 | Authentication
 |--------------------------------------------------------------------------
 |
-| Every order route requires the user to be logged in.
+| Every order route requires Firebase authentication.
 |
 */
 
@@ -26,69 +26,60 @@ router.use(authMiddleWare);
 
 /*
 |--------------------------------------------------------------------------
-| User Order Routes
+| USER ORDER ROUTES
 |--------------------------------------------------------------------------
 */
 
 /*
- * Create a new order
+ * Create Order
  *
  * POST /api/orders
  */
-router.post("/orders", createOrder);
+
+router.post("/", createOrder);
 
 /*
- * Get all orders belonging to logged-in user
+ * Get My Orders
  *
  * GET /api/orders
  */
-router.get("/orders", getMyOrders);
+
+router.get("/", getMyOrders);
 
 /*
- * Get one specific order belonging to logged-in user
+ * Get My Order
  *
  * GET /api/orders/:id
- *
- * IMPORTANT:
- * getMyOrderById checks:
- *
- * {
- *   _id: id,
- *   user: req.user.id
- * }
- *
- * Therefore one user cannot access another user's order.
  */
-router.get("/orders/:id", getMyOrderById);
+
+router.get("/:id", getMyOrderById);
 
 /*
 |--------------------------------------------------------------------------
-| Admin Order Routes
+| ADMIN ORDER ROUTES
 |--------------------------------------------------------------------------
 */
 
 /*
- * Get all orders
+ * Get All Orders
  *
- * GET /api/admin/orders
- *
- * Admin only
+ * GET /api/orders/admin
  */
+
 router.get(
-  "/admin/orders",
+  "/admin",
   authorizeRoles("admin"),
   getAllOrders
 );
 
 /*
- * Update order status
+ * Update Order Status
  *
- * PATCH /api/admin/orders/:id
- *
- * Admin only
+ * PATCH /api/orders/admin/:id
  */
+
 router.patch(
-  "/admin/orders/:id",
+  "/admin/:id",
   authorizeRoles("admin"),
   updateOrderStatus
 );
