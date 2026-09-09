@@ -17,9 +17,6 @@ const router = express.Router();
 |--------------------------------------------------------------------------
 | Authentication
 |--------------------------------------------------------------------------
-|
-| Every order route requires Firebase authentication.
-|
 */
 
 router.use(authMiddleWare);
@@ -35,24 +32,21 @@ router.use(authMiddleWare);
  *
  * POST /api/orders
  */
-
-router.post("/", createOrder);
+router.post("/orders", createOrder);
 
 /*
  * Get My Orders
  *
  * GET /api/orders
  */
-
-router.get("/", getMyOrders);
+router.get("/orders", getMyOrders);
 
 /*
  * Get My Order
  *
  * GET /api/orders/:id
  */
-
-router.get("/:id", getMyOrderById);
+router.get("/orders/:id", getMyOrderById);
 
 /*
 |--------------------------------------------------------------------------
@@ -63,11 +57,10 @@ router.get("/:id", getMyOrderById);
 /*
  * Get All Orders
  *
- * GET /api/orders/admin
+ * GET /api/admin/orders
  */
-
 router.get(
-  "/admin",
+  "/admin/orders",
   authorizeRoles("admin"),
   getAllOrders
 );
@@ -75,11 +68,10 @@ router.get(
 /*
  * Update Order Status
  *
- * PATCH /api/orders/admin/:id
+ * PATCH /api/admin/orders/:id
  */
-
 router.patch(
-  "/admin/:id",
+  "/admin/orders/:id",
   authorizeRoles("admin"),
   updateOrderStatus
 );
