@@ -95,37 +95,55 @@ async function postProducts(req, res) {
   }
 }
 
-async function getProducts(req, res) {
+const getProducts = async (req, res) => {
   try {
-    res.set(
-      "Cache-Control",
-      "public, max-age=60, stale-while-revalidate=300"
-    );
-
-    const products = await Product.find()
+    const products = await Product.find({
+      isActive: true,
+    })
       .select(
         "productId name gender category subcategory price image brand stock discount createdAt"
       )
-      .sort({ createdAt: -1 })
-      .lean();
+      .sort({ createdAt: -1 });
 
-    const catalogProducts = products.map(toCatalogProduct);
+    res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
 
     return res.status(200).json({
       success: true,
-      message: "Products fetched successfully",
-      products: catalogProducts,
+      count: products.length,
+      products,
     });
-  } catch (err) {
-    console.log(err);
+  } catch (error) {
+    console.error("GET PRODUCTS ERROR:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch products",
-      error: err.message,
+      message: "Failed to fetch products.",
     });
   }
-}
+};
+
+const getAdminProducts = async (req, res) => {
+  try {
+    const products = await Product.find({})
+      .select(
+        "productId name gender category subcategory price image brand stock discount isActive createdAt updatedAt"
+      )
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: products.length,
+      products,
+    });
+  } catch (error) {
+    console.error("GET ADMIN PRODUCTS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch admin products.",
+    });
+  }
+};
 
 async function getProductById(req, res) {
   try {
@@ -248,10 +266,91 @@ async function deleteProduct(req, res) {
   }
 }
 
+const archiveProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const product = await Product.findById(id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found.",
+      });
+    }
+
+    if (!product.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "Product is already archived.",
+      });
+    }
+
+    product.isActive = false;
+
+    await product.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Product archived successfully.",
+      product,
+    });
+  } catch (error) {
+    console.error("ARCHIVE PRODUCT ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to archive product.",
+    });
+  }
+};
+
+const restoreProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const product = await Product.findById(id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found.",
+      });
+    }
+
+    if (product.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "Product is already active.",
+      });
+    }
+
+    product.isActive = true;
+
+    await product.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Product restored successfully.",
+      product,
+    });
+  } catch (error) {
+    console.error("RESTORE PRODUCT ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to restore product.",
+    });
+  }
+};
+
 module.exports = {
   postProducts,
   getProducts,
+  getAdminProducts,
   getProductById,
   updateProduct,
   deleteProduct,
+  archiveProduct,
+  restoreProduct,
 };

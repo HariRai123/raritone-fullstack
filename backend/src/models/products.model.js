@@ -73,6 +73,12 @@ const productSchema = new mongoose.Schema(
       default: 0,
     },
 
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+
     vendorId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -85,12 +91,16 @@ const productSchema = new mongoose.Schema(
   }
 );
 
+
 productSchema.index({
   gender: 1,
   category: 1,
   subcategory: 1,
 });
 
-const Product = mongoose.model("Product", productSchema);
+productSchema.index({
+  isActive: 1,
+  createdAt: -1,
+});
 
-module.exports = Product;
+module.exports = mongoose.model("Product", productSchema);

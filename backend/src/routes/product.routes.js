@@ -5,9 +5,12 @@ const multer = require("multer");
 const {
   postProducts,
   getProducts,
+  getAdminProducts,
   getProductById,
   updateProduct,
   deleteProduct,
+  archiveProduct,
+  restoreProduct,
 } = require("../controllers/product.controller");
 
 const authMiddleWare = require("../middleware/auth.middleware");
@@ -28,9 +31,22 @@ router.post(
   postProducts
 );
 
-router.get("/products", getProducts);
+router.get(
+  "/products",
+  getProducts
+);
 
-router.get("/products/:id", getProductById);
+router.get(
+  "/admin/products",
+  authMiddleWare,
+  authorizeRoles("admin"),
+  getAdminProducts
+);
+
+router.get(
+  "/products/:id",
+  getProductById
+);
 
 router.put(
   "/products/:id",
@@ -38,6 +54,20 @@ router.put(
   authorizeRoles("admin"),
   upload.single("image"),
   updateProduct
+);
+
+router.patch(
+  "/products/:id/archive",
+  authMiddleWare,
+  authorizeRoles("admin"),
+  archiveProduct
+);
+
+router.patch(
+  "/products/:id/restore",
+  authMiddleWare,
+  authorizeRoles("admin"),
+  restoreProduct
 );
 
 router.delete(
