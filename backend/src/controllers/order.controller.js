@@ -630,10 +630,195 @@ async function updateOrderStatus(req, res) {
   }
 }
 
+/*
+|--------------------------------------------------------------------------
+| Cancel My Order
+|--------------------------------------------------------------------------
+|
+| PATCH /api/orders/:id/cancel
+|
+*/
+
+async function cancelMyOrder(req, res) {
+  const session = await mongoose.startSession();
+
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({
+        message: "Unauthorized user",
+      });
+    }
+
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        message: "Invalid order ID",
+      });
+    }
+
+    session.startTransaction();
+
+    /*
+    |--------------------------------------------------------------------------
+    | Find only the logged-in user's order
+    |--------------------------------------------------------------------------
+    */
+
+    const order = await Order.findOne({
+      _id: id,
+      user: req.user.id,
+    }).session(session);
+
+    if (!order) {
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        message: "Order not found",
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Validate cancellation status
+    |--------------------------------------------------------------------------
+    */
+
+    if (order.status === "cancelled") {
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        message: "Order is already cancelled",
+      });
+    }
+
+    if (order.status === "shipped") {
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        message:
+          "This order cannot be cancelled because it has already been shipped.",
+      });
+    }
+
+    if (order.status === "delivered") {
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        message:
+          "A delivered order cannot be cancelled.",
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Restore stock
+    |--------------------------------------------------------------------------
+    */
+
+    for (const item of order.items) {
+      const updatedProduct =
+        await Product.findByIdAndUpdate(
+          item.product,
+          {
+            $inc: {
+              stock: item.quantity,
+            },
+          },
+          {
+            new: true,
+            session,
+          },
+        );
+
+      if (!updatedProduct) {
+        throw new Error(
+          `PRODUCT_NOT_FOUND:${item.product}`,
+        );
+      }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Cancel order
+    |--------------------------------------------------------------------------
+    */
+
+    order.status = "cancelled";
+
+    /*
+     * For current COD flow payment remains pending.
+     * For future online payments, refund handling should
+     * be implemented separately through the payment gateway.
+     */
+    if (
+      order.paymentMethod === "cod"
+    ) {
+      order.paymentStatus = "pending";
+    }
+
+    await order.save({
+      session,
+    });
+
+    await session.commitTransaction();
+
+    /*
+    |--------------------------------------------------------------------------
+    | Return updated order
+    |--------------------------------------------------------------------------
+    */
+
+    const populatedOrder =
+      await Order.findById(
+        order._id,
+      )
+        .populate(
+          "user",
+          "name email role",
+        )
+        .populate(
+          "items.product",
+          "name brand image price category",
+        )
+        .lean();
+
+    return res.status(200).json({
+      message:
+        "Order cancelled successfully",
+      order: populatedOrder,
+    });
+  } catch (error) {
+    if (
+      session.inTransaction()
+    ) {
+      await session.abortTransaction();
+    }
+
+    console.error(
+      "CANCEL ORDER ERROR:",
+      error,
+    );
+
+    return res.status(500).json({
+      message:
+        "Failed to cancel order",
+      error:
+        process.env.NODE_ENV ===
+        "development"
+          ? error.message
+          : undefined,
+    });
+  } finally {
+    await session.endSession();
+  }
+}
+
 module.exports = {
   createOrder,
   getMyOrders,
   getMyOrderById,
   getAllOrders,
   updateOrderStatus,
+  cancelMyOrder
 };

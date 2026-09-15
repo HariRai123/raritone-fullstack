@@ -9,6 +9,7 @@ const {
   getMyOrderById,
   getAllOrders,
   updateOrderStatus,
+   cancelMyOrder
 } = require("../controllers/order.controller");
 
 const router = express.Router();
@@ -74,6 +75,11 @@ router.patch(
   "/admin/orders/:id",
   authorizeRoles("admin"),
   updateOrderStatus
+);
+
+router.patch(
+  "/orders/:id/cancel",
+  cancelMyOrder,
 );
 
 module.exports = router;
