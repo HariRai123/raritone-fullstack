@@ -10,15 +10,20 @@ const firebaseRegistrationMiddleware = require("../middleware/firebaseRegistrati
 
 const router = express.Router();
 
+// ============================================================
+// MULTER
+// ============================================================
+
 const upload = multer({
   storage: multer.memoryStorage(),
+
   limits: {
     fileSize: 5 * 1024 * 1024,
   },
 });
 
 // ============================================================
-// LEGACY AUTH
+// LEGACY EMAIL/PASSWORD AUTH
 // ============================================================
 
 router.post(
@@ -33,7 +38,7 @@ router.post(
 );
 
 // ============================================================
-// MIGRATION
+// FIREBASE MIGRATION
 // ============================================================
 
 router.post(
@@ -57,9 +62,18 @@ router.post(
 // FIREBASE REGISTRATION
 //
 // IMPORTANT:
-// DO NOT use authMiddleWare here.
+// Do NOT use the normal authMiddleWare here.
 //
-// New Firebase users do not exist in MongoDB yet.
+// The MongoDB user does not exist yet.
+// The middleware only verifies Firebase.
+//
+// Firebase
+//   ↓
+// Registration Middleware
+//   ↓
+// Registration Controller
+//   ↓
+// MongoDB User.create()
 // ============================================================
 
 router.post(
