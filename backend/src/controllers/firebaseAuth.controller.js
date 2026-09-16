@@ -24,6 +24,7 @@ const serializeUser = (user) => ({
 ============================================================ */
 
 const syncFirebaseUser = async (req, res) => {
+  console.log("🔥 SYNC ROUTE HIT");
   try {
     const {
       firebaseUid,
@@ -120,6 +121,7 @@ const syncFirebaseUser = async (req, res) => {
 ============================================================ */
 
 const registerFirebaseUser = async (req, res) => {
+  console.log("🔥 REGISTER-FIREBASE ROUTE HIT");
   try {
     const {
       firebaseUid,
