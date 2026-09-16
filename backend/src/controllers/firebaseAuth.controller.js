@@ -1,30 +1,40 @@
 const User = require("../models/user.model");
 
-/* ============================================================
-   RESPONSE HELPER
-============================================================ */
+// ============================================================
+// SERIALIZE USER
+// ============================================================
 
 const serializeUser = (user) => ({
   id: user._id,
+
   firebaseUid: user.firebaseUid,
+
   name: user.name,
+
   email: user.email,
+
   phone: user.phone,
+
   profileImage: user.profileImage,
+
   role: user.role,
+
   provider: user.provider,
+
   isActive: user.isActive,
+
   createdAt: user.createdAt,
+
   updatedAt: user.updatedAt,
 });
 
-/* ============================================================
-   FIREBASE LOGIN / SYNC
-   EXISTING MONGODB ACCOUNT ONLY
-============================================================ */
+// ============================================================
+// FIREBASE LOGIN SYNC
+//
+// Existing account ONLY
+// ============================================================
 
 const syncFirebaseUser = async (req, res) => {
-  console.log("🔥 SYNC ROUTE HIT");
   try {
     const {
       firebaseUid,
@@ -35,46 +45,50 @@ const syncFirebaseUser = async (req, res) => {
       provider,
     } = req.user || {};
 
+    console.log(
+      "🔥 FIREBASE LOGIN SYNC",
+    );
+
+    console.log({
+      firebaseUid,
+      email,
+      phone,
+      name,
+      provider,
+    });
+
     if (!firebaseUid) {
       return res.status(400).json({
-        message: "Firebase user ID is missing",
+        message:
+          "Firebase user ID is missing",
       });
     }
 
-    /* --------------------------------------------------------
-       Find existing MongoDB account
-    -------------------------------------------------------- */
-
+    // Find existing MongoDB user
     const user = await User.findOne({
       firebaseUid,
     });
 
-    /* --------------------------------------------------------
-       Account does not exist
-       IMPORTANT:
-       Login must NOT create an account.
-    -------------------------------------------------------- */
-
     if (!user) {
+      console.log(
+        "❌ USER ACCOUNT NOT FOUND",
+        firebaseUid,
+      );
+
       return res.status(404).json({
-        message: "User account not found",
+        message:
+          "User account not found",
       });
     }
-
-    /* --------------------------------------------------------
-       Check account status
-    -------------------------------------------------------- */
 
     if (!user.isActive) {
       return res.status(403).json({
-        message: "Your account has been deactivated",
+        message:
+          "Your account has been deactivated",
       });
     }
 
-    /* --------------------------------------------------------
-       Update safe Firebase profile information
-       -------------------------------------------------------- */
-
+    // Update user information when available
     if (name) {
       user.name = name;
     }
@@ -95,33 +109,44 @@ const syncFirebaseUser = async (req, res) => {
       user.provider = provider;
     }
 
-    /*
-     * NEVER modify role from Firebase/mobile.
-     */
-
     await user.save();
 
+    console.log(
+      "✅ USER LOGIN SYNC SUCCESS",
+      user._id,
+    );
+
     return res.status(200).json({
-      message: "User synced successfully",
+      message:
+        "User synced successfully",
+
       user: serializeUser(user),
     });
   } catch (error) {
-    console.error("Firebase login sync error:", error);
+    console.error(
+      "Firebase login sync error:",
+      error,
+    );
 
     return res.status(500).json({
-      message: "Failed to sync user",
+      message:
+        "Failed to sync user",
+
       error: error.message,
     });
   }
 };
 
-/* ============================================================
-   FIREBASE REGISTRATION
-   CREATE NEW MONGODB ACCOUNT
-============================================================ */
+// ============================================================
+// FIREBASE REGISTRATION
+//
+// New account
+// ============================================================
 
-const registerFirebaseUser = async (req, res) => {
-  console.log("🔥 REGISTER-FIREBASE ROUTE HIT");
+const registerFirebaseUser = async (
+  req,
+  res,
+) => {
   try {
     const {
       firebaseUid,
@@ -132,29 +157,48 @@ const registerFirebaseUser = async (req, res) => {
       provider,
     } = req.user || {};
 
-    /* --------------------------------------------------------
-       Basic validation
-    -------------------------------------------------------- */
+    console.log(
+      "🔥 REGISTER FIREBASE USER CONTROLLER HIT",
+    );
+
+    console.log({
+      firebaseUid,
+      email,
+      phone,
+      name,
+      provider,
+    });
+
+    // --------------------------------------------------------
+    // Validate Firebase UID
+    // --------------------------------------------------------
 
     if (!firebaseUid) {
       return res.status(400).json({
-        message: "Firebase user ID is missing",
+        message:
+          "Firebase user ID is missing",
       });
     }
+
+    // --------------------------------------------------------
+    // Email or phone required
+    // --------------------------------------------------------
 
     if (!email && !phone) {
       return res.status(400).json({
-        message: "Email or phone is required",
+        message:
+          "Email or phone is required",
       });
     }
 
-    /* --------------------------------------------------------
-       Check Firebase UID
-    -------------------------------------------------------- */
+    // --------------------------------------------------------
+    // Check Firebase UID
+    // --------------------------------------------------------
 
-    const existingFirebaseUser = await User.findOne({
-      firebaseUid,
-    });
+    const existingFirebaseUser =
+      await User.findOne({
+        firebaseUid,
+      });
 
     if (existingFirebaseUser) {
       return res.status(409).json({
@@ -163,56 +207,59 @@ const registerFirebaseUser = async (req, res) => {
       });
     }
 
-    /* --------------------------------------------------------
-       Check email
-       -------------------------------------------------------- */
-
-    let existingEmailUser = null;
+    // --------------------------------------------------------
+    // Check email
+    // --------------------------------------------------------
 
     if (email) {
-      existingEmailUser = await User.findOne({
-        email: email.toLowerCase(),
-      });
+      const cleanEmail =
+        email.trim().toLowerCase();
+
+      const existingEmailUser =
+        await User.findOne({
+          email: cleanEmail,
+        });
+
+      if (existingEmailUser) {
+        return res.status(409).json({
+          message:
+            "An account already exists with this email address. Please sign in instead.",
+        });
+      }
     }
 
-    if (existingEmailUser) {
-      return res.status(409).json({
-        message:
-          "An account already exists with this email address. Please sign in instead.",
-      });
-    }
-
-    /* --------------------------------------------------------
-       Check phone
-       -------------------------------------------------------- */
-
-    let existingPhoneUser = null;
+    // --------------------------------------------------------
+    // Check phone
+    // --------------------------------------------------------
 
     if (phone) {
-      existingPhoneUser = await User.findOne({
-        phone,
-      });
+      const cleanPhone =
+        phone.trim();
+
+      const existingPhoneUser =
+        await User.findOne({
+          phone: cleanPhone,
+        });
+
+      if (existingPhoneUser) {
+        return res.status(409).json({
+          message:
+            "An account already exists with this phone number. Please sign in instead.",
+        });
+      }
     }
 
-    if (existingPhoneUser) {
-      return res.status(409).json({
-        message:
-          "An account already exists with this phone number. Please sign in instead.",
-      });
-    }
+    // --------------------------------------------------------
+    // Determine provider
+    // --------------------------------------------------------
 
-    /* --------------------------------------------------------
-       Determine safe provider
-       -------------------------------------------------------- */
-
-    let safeProvider = provider;
+    let safeProvider =
+      provider;
 
     if (!safeProvider) {
-      if (phone) {
-        safeProvider = "phone";
-      } else {
-        safeProvider = "password";
-      }
+      safeProvider = phone
+        ? "phone"
+        : "password";
     }
 
     const allowedProviders = [
@@ -221,53 +268,63 @@ const registerFirebaseUser = async (req, res) => {
       "phone",
     ];
 
-    if (!allowedProviders.includes(safeProvider)) {
+    if (
+      !allowedProviders.includes(
+        safeProvider,
+      )
+    ) {
       safeProvider = "password";
     }
 
-    /* --------------------------------------------------------
-       Create MongoDB user
-       -------------------------------------------------------- */
+    // --------------------------------------------------------
+    // CREATE MONGODB USER
+    // --------------------------------------------------------
 
-    const user = await User.create({
-      firebaseUid,
+    const user =
+      await User.create({
+        firebaseUid,
 
-      name:
-        name?.trim() ||
-        "Raritone User",
+        name:
+          name?.trim() ||
+          "Raritone User",
 
-      email:
-        email?.trim().toLowerCase() ||
-        undefined,
+        email:
+          email?.trim().toLowerCase() ||
+          undefined,
 
-      phone:
-        phone?.trim() ||
-        undefined,
+        phone:
+          phone?.trim() ||
+          undefined,
 
-      profileImage:
-        profileImage || "",
+        profileImage:
+          profileImage || "",
 
-      provider: safeProvider,
+        provider:
+          safeProvider,
 
-      /*
-       * New registrations are always normal users.
-       */
-      role: "user",
+        role: "user",
 
-      isActive: true,
-    });
+        isActive: true,
+      });
+
+    console.log(
+      "✅ FIREBASE USER CREATED IN MONGODB",
+      user._id,
+    );
 
     return res.status(201).json({
-      message: "User registered successfully",
+      message:
+        "User registered successfully",
+
       user: serializeUser(user),
     });
   } catch (error) {
-    console.error("Firebase registration error:", error);
+    console.error(
+      "Firebase registration error:",
+      error,
+    );
 
-    /* --------------------------------------------------------
-       Mongo duplicate key protection
-    -------------------------------------------------------- */
-
+    // MongoDB duplicate key
     if (error?.code === 11000) {
       return res.status(409).json({
         message:
@@ -276,7 +333,9 @@ const registerFirebaseUser = async (req, res) => {
     }
 
     return res.status(500).json({
-      message: "Failed to register Firebase user",
+      message:
+        "Failed to register Firebase user",
+
       error: error.message,
     });
   }

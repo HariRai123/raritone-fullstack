@@ -2,36 +2,24 @@ const express = require("express");
 const multer = require("multer");
 
 const authController = require("../controllers/auth.controller");
+const firebaseAuthController = require("../controllers/firebaseAuth.controller");
+const firebaseMigrationController = require("../controllers/firebaseMigration.controller");
 
-const firebaseAuthController = require(
-  "../controllers/firebaseAuth.controller"
-);
-
-const firebaseMigrationController = require(
-  "../controllers/firebaseMigration.controller"
-);
-
-const authMiddleWare = require(
-  "../middleware/auth.middleware"
-);
+const authMiddleWare = require("../middleware/auth.middleware");
+const firebaseRegistrationMiddleware = require("../middleware/firebaseRegistration.middleware");
 
 const router = express.Router();
 
-/* ============================================================
-   MULTER
-============================================================ */
-
 const upload = multer({
   storage: multer.memoryStorage(),
-
   limits: {
     fileSize: 5 * 1024 * 1024,
   },
 });
 
-/* ============================================================
-   LEGACY AUTH
-============================================================ */
+// ============================================================
+// LEGACY AUTH
+// ============================================================
 
 router.post(
   "/register",
@@ -44,45 +32,45 @@ router.post(
   authController.loginUser,
 );
 
-/* ============================================================
-   LEGACY → FIREBASE MIGRATION
-============================================================ */
+// ============================================================
+// MIGRATION
+// ============================================================
 
 router.post(
   "/migrate",
   firebaseMigrationController.migrateLegacyUser,
 );
 
-/* ============================================================
-   FIREBASE AUTH
-============================================================ */
+// ============================================================
+// FIREBASE LOGIN
+//
+// Existing MongoDB account required.
+// ============================================================
 
-/*
- * LOGIN
- *
- * Existing MongoDB user required.
- * Does NOT create a new user.
- */
 router.post(
   "/sync",
   authMiddleWare,
   firebaseAuthController.syncFirebaseUser,
 );
 
-/*
- * SIGNUP
- *
- * Creates a new MongoDB user.
- */
+// ============================================================
+// FIREBASE REGISTRATION
+//
+// IMPORTANT:
+// DO NOT use authMiddleWare here.
+//
+// New Firebase users do not exist in MongoDB yet.
+// ============================================================
+
 router.post(
   "/register-firebase",
-  authMiddleWare,
+  firebaseRegistrationMiddleware,
   firebaseAuthController.registerFirebaseUser,
 );
 
-/* ============================================================
-   PROFILE
-============================================================ */
+// ============================================================
+// PROFILE
+// ============================================================
 
 router.get(
   "/profile",
