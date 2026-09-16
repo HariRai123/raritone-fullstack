@@ -1,5 +1,28 @@
 const User = require("../models/user.model");
 
+/* ============================================================
+   RESPONSE HELPER
+============================================================ */
+
+const serializeUser = (user) => ({
+  id: user._id,
+  firebaseUid: user.firebaseUid,
+  name: user.name,
+  email: user.email,
+  phone: user.phone,
+  profileImage: user.profileImage,
+  role: user.role,
+  provider: user.provider,
+  isActive: user.isActive,
+  createdAt: user.createdAt,
+  updatedAt: user.updatedAt,
+});
+
+/* ============================================================
+   FIREBASE LOGIN / SYNC
+   EXISTING MONGODB ACCOUNT ONLY
+============================================================ */
+
 const syncFirebaseUser = async (req, res) => {
   try {
     const {
@@ -9,114 +32,80 @@ const syncFirebaseUser = async (req, res) => {
       name,
       profileImage,
       provider,
-    } = req.user;
+    } = req.user || {};
 
-    // Firebase UID is required
     if (!firebaseUid) {
       return res.status(400).json({
         message: "Firebase user ID is missing",
       });
     }
 
-    // --------------------------------------------------
-    // Find existing MongoDB user
-    // --------------------------------------------------
-    let user = await User.findOne({
+    /* --------------------------------------------------------
+       Find existing MongoDB account
+    -------------------------------------------------------- */
+
+    const user = await User.findOne({
       firebaseUid,
     });
 
-    // --------------------------------------------------
-    // Existing user
-    // --------------------------------------------------
-    if (user) {
-      // Check account status
-      if (!user.isActive) {
-        return res.status(403).json({
-          message: "Your account has been deactivated",
-        });
-      }
+    /* --------------------------------------------------------
+       Account does not exist
+       IMPORTANT:
+       Login must NOT create an account.
+    -------------------------------------------------------- */
 
-      // Update information received from Firebase
-      user.name = name || user.name;
-
-      user.email = email || user.email;
-
-      user.phone = phone || user.phone;
-
-      user.profileImage =
-        profileImage || user.profileImage;
-
-      if (provider) {
-        user.provider = provider;
-      }
-
-      // IMPORTANT:
-      // Do not update role here.
-      //
-      // Role must remain controlled by the database/admin.
-      // Never accept role from Firebase/mobile client.
-
-      await user.save();
-
-      return res.status(200).json({
-        message: "User synced successfully",
-        user: {
-          id: user._id,
-          firebaseUid: user.firebaseUid,
-          name: user.name,
-          email: user.email,
-          phone: user.phone,
-          profileImage: user.profileImage,
-          role: user.role,
-          provider: user.provider,
-          isActive: user.isActive,
-          createdAt: user.createdAt,
-          updatedAt: user.updatedAt,
-        },
+    if (!user) {
+      return res.status(404).json({
+        message: "User account not found",
       });
     }
 
-    // --------------------------------------------------
-    // Create new MongoDB user
-    // --------------------------------------------------
-    user = await User.create({
-      firebaseUid,
+    /* --------------------------------------------------------
+       Check account status
+    -------------------------------------------------------- */
 
-      name: name || "Raritone User",
+    if (!user.isActive) {
+      return res.status(403).json({
+        message: "Your account has been deactivated",
+      });
+    }
 
-      email: email || undefined,
+    /* --------------------------------------------------------
+       Update safe Firebase profile information
+       -------------------------------------------------------- */
 
-      phone: phone || undefined,
+    if (name) {
+      user.name = name;
+    }
 
-      profileImage: profileImage || "",
+    if (email) {
+      user.email = email.toLowerCase();
+    }
 
-      provider:
-        provider || (phone ? "phone" : "password"),
+    if (phone) {
+      user.phone = phone;
+    }
 
-      // New users always start as normal users
-      role: "user",
+    if (profileImage) {
+      user.profileImage = profileImage;
+    }
 
-      isActive: true,
-    });
+    if (provider) {
+      user.provider = provider;
+    }
 
-    return res.status(201).json({
-      message: "User created successfully",
-      user: {
-        id: user._id,
-        firebaseUid: user.firebaseUid,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        profileImage: user.profileImage,
-        role: user.role,
-        provider: user.provider,
-        isActive: user.isActive,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      },
+    /*
+     * NEVER modify role from Firebase/mobile.
+     */
+
+    await user.save();
+
+    return res.status(200).json({
+      message: "User synced successfully",
+      user: serializeUser(user),
     });
   } catch (error) {
-    console.error("Firebase user sync error:", error);
+    console.error("Firebase login sync error:", error);
 
     return res.status(500).json({
       message: "Failed to sync user",
@@ -125,6 +114,173 @@ const syncFirebaseUser = async (req, res) => {
   }
 };
 
+/* ============================================================
+   FIREBASE REGISTRATION
+   CREATE NEW MONGODB ACCOUNT
+============================================================ */
+
+const registerFirebaseUser = async (req, res) => {
+  try {
+    const {
+      firebaseUid,
+      email,
+      phone,
+      name,
+      profileImage,
+      provider,
+    } = req.user || {};
+
+    /* --------------------------------------------------------
+       Basic validation
+    -------------------------------------------------------- */
+
+    if (!firebaseUid) {
+      return res.status(400).json({
+        message: "Firebase user ID is missing",
+      });
+    }
+
+    if (!email && !phone) {
+      return res.status(400).json({
+        message: "Email or phone is required",
+      });
+    }
+
+    /* --------------------------------------------------------
+       Check Firebase UID
+    -------------------------------------------------------- */
+
+    const existingFirebaseUser = await User.findOne({
+      firebaseUid,
+    });
+
+    if (existingFirebaseUser) {
+      return res.status(409).json({
+        message:
+          "An account already exists for this Firebase account. Please sign in instead.",
+      });
+    }
+
+    /* --------------------------------------------------------
+       Check email
+       -------------------------------------------------------- */
+
+    let existingEmailUser = null;
+
+    if (email) {
+      existingEmailUser = await User.findOne({
+        email: email.toLowerCase(),
+      });
+    }
+
+    if (existingEmailUser) {
+      return res.status(409).json({
+        message:
+          "An account already exists with this email address. Please sign in instead.",
+      });
+    }
+
+    /* --------------------------------------------------------
+       Check phone
+       -------------------------------------------------------- */
+
+    let existingPhoneUser = null;
+
+    if (phone) {
+      existingPhoneUser = await User.findOne({
+        phone,
+      });
+    }
+
+    if (existingPhoneUser) {
+      return res.status(409).json({
+        message:
+          "An account already exists with this phone number. Please sign in instead.",
+      });
+    }
+
+    /* --------------------------------------------------------
+       Determine safe provider
+       -------------------------------------------------------- */
+
+    let safeProvider = provider;
+
+    if (!safeProvider) {
+      if (phone) {
+        safeProvider = "phone";
+      } else {
+        safeProvider = "password";
+      }
+    }
+
+    const allowedProviders = [
+      "password",
+      "google",
+      "phone",
+    ];
+
+    if (!allowedProviders.includes(safeProvider)) {
+      safeProvider = "password";
+    }
+
+    /* --------------------------------------------------------
+       Create MongoDB user
+       -------------------------------------------------------- */
+
+    const user = await User.create({
+      firebaseUid,
+
+      name:
+        name?.trim() ||
+        "Raritone User",
+
+      email:
+        email?.trim().toLowerCase() ||
+        undefined,
+
+      phone:
+        phone?.trim() ||
+        undefined,
+
+      profileImage:
+        profileImage || "",
+
+      provider: safeProvider,
+
+      /*
+       * New registrations are always normal users.
+       */
+      role: "user",
+
+      isActive: true,
+    });
+
+    return res.status(201).json({
+      message: "User registered successfully",
+      user: serializeUser(user),
+    });
+  } catch (error) {
+    console.error("Firebase registration error:", error);
+
+    /* --------------------------------------------------------
+       Mongo duplicate key protection
+    -------------------------------------------------------- */
+
+    if (error?.code === 11000) {
+      return res.status(409).json({
+        message:
+          "An account already exists with the provided information.",
+      });
+    }
+
+    return res.status(500).json({
+      message: "Failed to register Firebase user",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   syncFirebaseUser,
+  registerFirebaseUser,
 };

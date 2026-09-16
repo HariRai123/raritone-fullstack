@@ -17,50 +17,84 @@ const authMiddleWare = require(
 
 const router = express.Router();
 
+/* ============================================================
+   MULTER
+============================================================ */
+
 const upload = multer({
   storage: multer.memoryStorage(),
+
   limits: {
     fileSize: 5 * 1024 * 1024,
   },
 });
 
-// Legacy routes
+/* ============================================================
+   LEGACY AUTH
+============================================================ */
+
 router.post(
   "/register",
   upload.single("profileImage"),
-  authController.registerUser
+  authController.registerUser,
 );
 
 router.post(
   "/login",
-  authController.loginUser
+  authController.loginUser,
 );
 
-// Legacy account → Firebase migration
+/* ============================================================
+   LEGACY → FIREBASE MIGRATION
+============================================================ */
+
 router.post(
   "/migrate",
-  firebaseMigrationController.migrateLegacyUser
+  firebaseMigrationController.migrateLegacyUser,
 );
 
-// Firebase → MongoDB synchronization
+/* ============================================================
+   FIREBASE AUTH
+============================================================ */
+
+/*
+ * LOGIN
+ *
+ * Existing MongoDB user required.
+ * Does NOT create a new user.
+ */
 router.post(
   "/sync",
   authMiddleWare,
-  firebaseAuthController.syncFirebaseUser
+  firebaseAuthController.syncFirebaseUser,
 );
 
-// Protected profile routes
+/*
+ * SIGNUP
+ *
+ * Creates a new MongoDB user.
+ */
+router.post(
+  "/register-firebase",
+  authMiddleWare,
+  firebaseAuthController.registerFirebaseUser,
+);
+
+/* ============================================================
+   PROFILE
+============================================================ */
+
 router.get(
   "/profile",
   authMiddleWare,
-  authController.getProfile
+  authController.getProfile,
 );
 
 router.put(
   "/profile",
   authMiddleWare,
   upload.single("profileImage"),
-  authController.updateProfile
+  authController.updateProfile,
 );
 
 module.exports = router;
