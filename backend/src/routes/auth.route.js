@@ -89,7 +89,8 @@ router.get(
 router.put(
   "/profile",
   authMiddleWare,
-  firebaseAuthController.updateFirebaseProfile,
+  upload.single("profileImage"),
+  firebaseAuthController.updateFirebaseProfile
 );
 
 module.exports = router;

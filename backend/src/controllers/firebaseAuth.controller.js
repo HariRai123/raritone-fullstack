@@ -1,4 +1,5 @@
 const User = require("../models/user.model");
+const uploadFile = require("../services/storage.service");
 
 const serializeUser = (user) => ({
   id: user._id,
@@ -358,37 +359,27 @@ const registerFirebaseUser = async (
 |--------------------------------------------------------------------------
 */
 
-const updateFirebaseProfile = async (
-  req,
-  res,
-) => {
+const updateFirebaseProfile = async (req, res) => {
   try {
-    const firebaseUid =
-      req.user?.firebaseUid;
+    const firebaseUid = req.user?.firebaseUid;
 
     if (!firebaseUid) {
       return res.status(401).json({
-        message:
-          "Firebase user ID is missing",
+        message: "Firebase user ID is missing",
       });
     }
 
-    const user =
-      await User.findOne({
-        firebaseUid,
-      });
+    const user = await User.findOne({ firebaseUid });
 
     if (!user) {
       return res.status(404).json({
-        message:
-          "User account not found",
+        message: "User account not found",
       });
     }
 
     if (!user.isActive) {
       return res.status(403).json({
-        message:
-          "Your account has been deactivated",
+        message: "Your account has been deactivated",
       });
     }
 
@@ -399,93 +390,97 @@ const updateFirebaseProfile = async (
       height,
       weight,
       clothingSize,
-      profileImage,
     } = req.body || {};
 
     /*
-     * Name
+     * ---------------------------------------------------------
+     * BASIC PROFILE INFORMATION
+     * ---------------------------------------------------------
      */
 
-    if (
-      typeof name ===
-        "string" &&
-      name.trim()
-    ) {
-      user.name =
-        name.trim();
+    if (typeof name === "string" && name.trim()) {
+      user.name = name.trim();
+    }
+
+    if (typeof phone === "string") {
+      user.phone = phone.trim();
+    }
+
+    if (typeof gender === "string") {
+      user.gender = gender.trim();
+    }
+
+    if (typeof height === "string") {
+      user.height = height.trim();
+    }
+
+    if (typeof weight === "string") {
+      user.weight = weight.trim();
+    }
+
+    if (typeof clothingSize === "string") {
+      user.clothingSize = clothingSize.trim();
     }
 
     /*
-     * Phone
-     */
-
-    if (
-      typeof phone ===
-      "string"
-    ) {
-      user.phone =
-        phone.trim();
-    }
-
-    /*
-     * Profile Image
-     */
-
-    if (
-      typeof profileImage ===
-        "string" &&
-      profileImage.trim()
-    ) {
-      user.profileImage =
-        profileImage.trim();
-    }
-
-    /*
-     * Future 3D / personalization
-     * fields.
+     * ---------------------------------------------------------
+     * PROFILE IMAGE
+     * ---------------------------------------------------------
      *
-     * These are stored as user metadata
-     * for future avatar/try-on work.
+     * Mobile app sends:
+     *
+     * profileImage -> multipart/form-data file
+     *
+     * Multer puts the file inside req.file.
      */
 
-    if (
-      typeof gender ===
-      "string"
-    ) {
-      user.gender =
-        gender.trim();
-    }
+    if (req.file) {
+      console.log("📸 PROFILE IMAGE RECEIVED");
 
-    if (
-      typeof height ===
-      "string"
-    ) {
-      user.height =
-        height.trim();
-    }
+      console.log({
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+      });
 
-    if (
-      typeof weight ===
-      "string"
-    ) {
-      user.weight =
-        weight.trim();
-    }
+      const fileExtension =
+        req.file.originalname.includes(".")
+          ? req.file.originalname.substring(
+              req.file.originalname.lastIndexOf("."),
+            )
+          : ".jpg";
 
-    if (
-      typeof clothingSize ===
-      "string"
-    ) {
-      user.clothingSize =
-        clothingSize.trim();
+      const fileName =
+        `profile-${firebaseUid}-${Date.now()}${fileExtension}`;
+
+      const uploadResult = await uploadFile(
+        req.file.buffer,
+        fileName,
+      );
+
+      console.log("✅ PROFILE IMAGE UPLOADED TO IMAGEKIT");
+
+      if (!uploadResult?.url) {
+        throw new Error(
+          "ImageKit upload succeeded but no URL was returned.",
+        );
+      }
+
+      user.profileImage = uploadResult.url;
+
+      console.log(
+        "🖼️ IMAGEKIT URL:",
+        uploadResult.url,
+      );
     }
 
     /*
-     * Mark onboarding as completed.
+     * ---------------------------------------------------------
+     * PROFILE COMPLETION
+     * ---------------------------------------------------------
      */
 
-    user.profileCompleted =
-      true;
+    user.profileCompleted = true;
 
     await user.save();
 
@@ -495,11 +490,8 @@ const updateFirebaseProfile = async (
     );
 
     return res.status(200).json({
-      message:
-        "Profile updated successfully",
-
-      user:
-        serializeUser(user),
+      message: "Profile updated successfully",
+      user: serializeUser(user),
     });
   } catch (error) {
     console.error(
@@ -508,11 +500,8 @@ const updateFirebaseProfile = async (
     );
 
     return res.status(500).json({
-      message:
-        "Failed to update profile",
-
-      error:
-        error.message,
+      message: "Failed to update profile",
+      error: error.message,
     });
   }
 };
