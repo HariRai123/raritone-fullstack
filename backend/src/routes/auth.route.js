@@ -10,21 +10,19 @@ const firebaseRegistrationMiddleware = require("../middleware/firebaseRegistrati
 
 const router = express.Router();
 
-// ============================================================
-// MULTER
-// ============================================================
-
 const upload = multer({
   storage: multer.memoryStorage(),
-
   limits: {
     fileSize: 5 * 1024 * 1024,
   },
 });
 
-// ============================================================
-// LEGACY EMAIL/PASSWORD AUTH
-// ============================================================
+
+/*
+|--------------------------------------------------------------------------
+| Legacy Authentication
+|--------------------------------------------------------------------------
+*/
 
 router.post(
   "/register",
@@ -37,66 +35,61 @@ router.post(
   authController.loginUser,
 );
 
-// ============================================================
-// FIREBASE MIGRATION
-// ============================================================
-
 router.post(
   "/migrate",
   firebaseMigrationController.migrateLegacyUser,
 );
 
-// ============================================================
-// FIREBASE LOGIN
-//
-// Existing MongoDB account required.
-// ============================================================
 
+/*
+|--------------------------------------------------------------------------
+| Firebase Authentication
+|--------------------------------------------------------------------------
+*/
+
+/*
+ * Existing Firebase user login
+ */
 router.post(
   "/sync",
   authMiddleWare,
   firebaseAuthController.syncFirebaseUser,
 );
 
-// ============================================================
-// FIREBASE REGISTRATION
-//
-// IMPORTANT:
-// Do NOT use the normal authMiddleWare here.
-//
-// The MongoDB user does not exist yet.
-// The middleware only verifies Firebase.
-//
-// Firebase
-//   ↓
-// Registration Middleware
-//   ↓
-// Registration Controller
-//   ↓
-// MongoDB User.create()
-// ============================================================
 
+/*
+ * New Firebase user registration
+ */
 router.post(
   "/register-firebase",
   firebaseRegistrationMiddleware,
   firebaseAuthController.registerFirebaseUser,
 );
 
-// ============================================================
-// PROFILE
-// ============================================================
 
+/*
+|--------------------------------------------------------------------------
+| Profile
+|--------------------------------------------------------------------------
+*/
+
+/*
+ * Get authenticated profile
+ */
 router.get(
   "/profile",
   authMiddleWare,
   authController.getProfile,
 );
 
+
+/*
+ * Update authenticated Firebase profile
+ */
 router.put(
   "/profile",
   authMiddleWare,
-  upload.single("profileImage"),
-  authController.updateProfile,
+  firebaseAuthController.updateFirebaseProfile,
 );
 
 module.exports = router;

@@ -30,8 +30,6 @@ const userSchema = new mongoose.Schema(
       unique: true,
     },
 
-    // Temporary field for existing users during migration.
-    // Firebase will handle passwords for new authentication.
     password: {
       type: String,
       select: false,
@@ -54,6 +52,11 @@ const userSchema = new mongoose.Schema(
       required: true,
     },
 
+    profileCompleted: {
+      type: Boolean,
+      default: false,
+    },
+
     isActive: {
       type: Boolean,
       default: true,
@@ -64,6 +67,7 @@ const userSchema = new mongoose.Schema(
   },
 );
 
-const User = mongoose.model("User", userSchema);
-
-module.exports = User;
+module.exports = mongoose.model(
+  "User",
+  userSchema,
+);
