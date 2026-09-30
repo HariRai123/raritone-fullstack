@@ -7,6 +7,7 @@ const threeDAssetSchema = new mongoose.Schema(
       unique: true,
       required: true,
       index: true,
+      trim: true,
     },
 
     productId: {
@@ -19,24 +20,27 @@ const threeDAssetSchema = new mongoose.Schema(
     vendorId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      default: null,
       index: true,
     },
 
     assetUrl: {
       type: String,
       required: true,
+      trim: true,
     },
 
     thumbnailUrl: {
       type: String,
       default: null,
+      trim: true,
     },
 
     format: {
       type: String,
       enum: ["glb", "gltf"],
       required: true,
+      lowercase: true,
     },
 
     polygonCount: {
@@ -54,17 +58,28 @@ const threeDAssetSchema = new mongoose.Schema(
     modelVersion: {
       type: String,
       default: "3d-v1",
+      trim: true,
     },
-    source:{
-      type:String,
-      default:"ai_ml",
-      trim:true,
+
+    source: {
+      type: String,
+      enum: [
+        "ai_ml",
+        "manual",
+        "uploaded",
+        "licensed",
+        "generated",
+      ],
+      default: "ai_ml",
+      trim: true,
     },
-    license:{
-      type:String,
-      default:"",
-      trim:true
+
+    license: {
+      type: String,
+      default: "",
+      trim: true,
     },
+
     status: {
       type: String,
       enum: [
@@ -81,7 +96,7 @@ const threeDAssetSchema = new mongoose.Schema(
     rejectionReason: {
       type: String,
       default: "",
-      trim:true,
+      trim: true,
     },
 
     generatedAt: {
@@ -106,4 +121,29 @@ const threeDAssetSchema = new mongoose.Schema(
   },
 );
 
-module.exports = mongoose.model("ThreeDAsset", threeDAssetSchema);
+/*
+ * Useful indexes
+ */
+
+// Quickly find 3D assets for a product.
+threeDAssetSchema.index({
+  productId: 1,
+  status: 1,
+});
+
+// Quickly find vendor assets.
+threeDAssetSchema.index({
+  vendorId: 1,
+  createdAt: -1,
+});
+
+// Quickly find approved assets.
+threeDAssetSchema.index({
+  status: 1,
+  createdAt: -1,
+});
+
+module.exports = mongoose.model(
+  "ThreeDAsset",
+  threeDAssetSchema,
+);
