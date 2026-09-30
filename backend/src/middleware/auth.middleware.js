@@ -5,18 +5,11 @@ async function authMiddleWare(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
 
-    // --------------------------------------------------
-    // 1. Check Authorization header
-    // --------------------------------------------------
-
     if (!authHeader) {
       return res.status(401).json({
         message: "Authentication token is required",
       });
     }
-
-    // Expected:
-    // Authorization: Bearer <firebase-id-token>
 
     const [scheme, token] = authHeader.split(" ");
 
@@ -25,10 +18,6 @@ async function authMiddleWare(req, res, next) {
         message: "Invalid authentication format",
       });
     }
-
-    // --------------------------------------------------
-    // 2. Verify Firebase ID token
-    // --------------------------------------------------
 
     const decodedToken =
       await firebaseAuth.verifyIdToken(token);
@@ -39,10 +28,6 @@ async function authMiddleWare(req, res, next) {
       provider:
         decodedToken.firebase?.sign_in_provider || null,
     });
-
-    // --------------------------------------------------
-    // 3. Find MongoDB user
-    // --------------------------------------------------
 
     const user = await User.findOne({
       firebaseUid: decodedToken.uid,
@@ -61,19 +46,11 @@ async function authMiddleWare(req, res, next) {
       });
     }
 
-    // --------------------------------------------------
-    // 4. Check account status
-    // --------------------------------------------------
-
     if (!user.isActive) {
       return res.status(403).json({
         message: "Your account has been deactivated",
       });
     }
-
-    // --------------------------------------------------
-    // 5. Attach user to request
-    // --------------------------------------------------
 
     req.user = {
       id: user._id.toString(),
@@ -97,8 +74,6 @@ async function authMiddleWare(req, res, next) {
         decodedToken.picture ||
         null,
 
-      // IMPORTANT:
-      // Role always comes from MongoDB.
       role: user.role,
 
       provider:
@@ -111,9 +86,6 @@ async function authMiddleWare(req, res, next) {
             : "password",
     };
 
-    // --------------------------------------------------
-    // 6. Debug log
-    // --------------------------------------------------
 
     console.log("FIREBASE AUTH SUCCESS:", {
       firebaseUid: req.user.firebaseUid,

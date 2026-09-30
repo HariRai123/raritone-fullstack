@@ -3,22 +3,12 @@ const mongoose = require("mongoose");
 const Order = require("../models/order.model");
 const Product = require("../models/products.model");
 
-/*
-|--------------------------------------------------------------------------
-| Create Order
-|--------------------------------------------------------------------------
-|
-| POST /api/orders
-|
-*/
 
 async function createOrder(req, res) {
   const session = await mongoose.startSession();
 
   try {
-    // --------------------------------------------------
-    // Authentication
-    // --------------------------------------------------
+
 
     if (!req.user?.id) {
       return res.status(401).json({
@@ -32,9 +22,6 @@ async function createOrder(req, res) {
       paymentMethod = "cod",
     } = req.body;
 
-    // --------------------------------------------------
-    // Validate Items
-    // --------------------------------------------------
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
@@ -42,9 +29,7 @@ async function createOrder(req, res) {
       });
     }
 
-    // --------------------------------------------------
-    // Validate Shipping Address
-    // --------------------------------------------------
+
 
     if (
       !shippingAddress ||
@@ -80,9 +65,6 @@ async function createOrder(req, res) {
       }
     }
 
-    // --------------------------------------------------
-    // Validate Email
-    // --------------------------------------------------
 
     const email = String(
       shippingAddress.email
@@ -96,9 +78,7 @@ async function createOrder(req, res) {
       });
     }
 
-    // --------------------------------------------------
-    // Validate Phone
-    // --------------------------------------------------
+
 
     const phone = String(
       shippingAddress.phone
@@ -110,9 +90,6 @@ async function createOrder(req, res) {
       });
     }
 
-    // --------------------------------------------------
-    // Validate PIN
-    // --------------------------------------------------
 
     const pincode = String(
       shippingAddress.pincode
@@ -124,9 +101,7 @@ async function createOrder(req, res) {
       });
     }
 
-    // --------------------------------------------------
-    // Validate Payment Method
-    // --------------------------------------------------
+
 
     if (!["online", "cod"].includes(paymentMethod)) {
       return res.status(400).json({
@@ -134,9 +109,6 @@ async function createOrder(req, res) {
       });
     }
 
-    // --------------------------------------------------
-    // Prepare Products
-    // --------------------------------------------------
 
     const normalized = [];
 
@@ -147,19 +119,6 @@ async function createOrder(req, res) {
         });
       }
 
-      /*
-      |--------------------------------------------------------------------------
-      | IMPORTANT
-      |--------------------------------------------------------------------------
-      |
-      | Mobile sends:
-      |
-      | RAR-SHO-001
-      |
-      | This is your application's productId,
-      | NOT MongoDB _id.
-      |
-      */
 
       const productId = String(
         item.productId
@@ -182,10 +141,6 @@ async function createOrder(req, res) {
         });
       }
 
-      // ------------------------------------------------
-      // Find Product Using productId
-      // ------------------------------------------------
-
       const product = await Product.findOne({
         productId,
       }).session(session);
@@ -196,9 +151,6 @@ async function createOrder(req, res) {
         });
       }
 
-      // ------------------------------------------------
-      // Check Stock
-      // ------------------------------------------------
 
       if (Number(product.stock) < quantity) {
         return res.status(400).json({
@@ -206,9 +158,6 @@ async function createOrder(req, res) {
         });
       }
 
-      // ------------------------------------------------
-      // Never trust frontend price
-      // ------------------------------------------------
 
       normalized.push({
         product: product._id,
@@ -219,25 +168,15 @@ async function createOrder(req, res) {
       });
     }
 
-    // --------------------------------------------------
-    // Calculate Total
-    // --------------------------------------------------
-
     const total = normalized.reduce(
       (sum, item) =>
         sum + item.price * item.quantity,
       0
     );
 
-    // --------------------------------------------------
-    // Start Transaction
-    // --------------------------------------------------
 
     session.startTransaction();
 
-    // --------------------------------------------------
-    // Reduce Stock
-    // --------------------------------------------------
 
     for (const item of normalized) {
       const updatedProduct =
@@ -268,10 +207,6 @@ async function createOrder(req, res) {
         );
       }
     }
-
-    // --------------------------------------------------
-    // Create Order
-    // --------------------------------------------------
 
     const createdOrders =
       await Order.create(
@@ -325,15 +260,7 @@ async function createOrder(req, res) {
 
     const order = createdOrders[0];
 
-    // --------------------------------------------------
-    // Commit Transaction
-    // --------------------------------------------------
-
     await session.commitTransaction();
-
-    // --------------------------------------------------
-    // Get Final Order
-    // --------------------------------------------------
 
     const populatedOrder =
       await Order.findById(order._id)
@@ -347,18 +274,12 @@ async function createOrder(req, res) {
         )
         .lean();
 
-    // --------------------------------------------------
-    // Success
-    // --------------------------------------------------
-
     return res.status(201).json({
       message: "Order created successfully",
       order: populatedOrder,
     });
   } catch (error) {
-    // --------------------------------------------------
-    // Rollback
-    // --------------------------------------------------
+ 
 
     if (session.inTransaction()) {
       await session.abortTransaction();
@@ -390,15 +311,6 @@ async function createOrder(req, res) {
     await session.endSession();
   }
 }
-
-/*
-|--------------------------------------------------------------------------
-| Get My Orders
-|--------------------------------------------------------------------------
-|
-| GET /api/orders
-|
-*/
 
 async function getMyOrders(req, res) {
   try {
@@ -440,15 +352,6 @@ async function getMyOrders(req, res) {
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| Get My Order By ID
-|--------------------------------------------------------------------------
-|
-| GET /api/orders/:id
-|
-*/
-
 async function getMyOrderById(req, res) {
   try {
     if (!req.user?.id) {
@@ -467,15 +370,6 @@ async function getMyOrderById(req, res) {
 
     const order = await Order.findOne({
       _id: id,
-
-      /*
-      |--------------------------------------------------------------------------
-      | SECURITY
-      |--------------------------------------------------------------------------
-      |
-      | A user can only access their own order.
-      |
-      */
 
       user: req.user.id,
     })
@@ -511,15 +405,6 @@ async function getMyOrderById(req, res) {
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| Get All Orders
-|--------------------------------------------------------------------------
-|
-| GET /api/orders/admin
-|
-*/
-
 async function getAllOrders(req, res) {
   try {
     const orders = await Order.find()
@@ -552,14 +437,6 @@ async function getAllOrders(req, res) {
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| Update Order Status
-|--------------------------------------------------------------------------
-|
-| PATCH /api/orders/admin/:id
-|
-*/
 
 async function updateOrderStatus(req, res) {
   try {
@@ -630,15 +507,6 @@ async function updateOrderStatus(req, res) {
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| Cancel My Order
-|--------------------------------------------------------------------------
-|
-| PATCH /api/orders/:id/cancel
-|
-*/
-
 async function cancelMyOrder(req, res) {
   const session = await mongoose.startSession();
 
@@ -659,12 +527,6 @@ async function cancelMyOrder(req, res) {
 
     session.startTransaction();
 
-    /*
-    |--------------------------------------------------------------------------
-    | Find only the logged-in user's order
-    |--------------------------------------------------------------------------
-    */
-
     const order = await Order.findOne({
       _id: id,
       user: req.user.id,
@@ -677,12 +539,6 @@ async function cancelMyOrder(req, res) {
         message: "Order not found",
       });
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Validate cancellation status
-    |--------------------------------------------------------------------------
-    */
 
     if (order.status === "cancelled") {
       await session.abortTransaction();
@@ -710,12 +566,6 @@ async function cancelMyOrder(req, res) {
       });
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Restore stock
-    |--------------------------------------------------------------------------
-    */
-
     for (const item of order.items) {
       const updatedProduct =
         await Product.findByIdAndUpdate(
@@ -738,19 +588,8 @@ async function cancelMyOrder(req, res) {
       }
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Cancel order
-    |--------------------------------------------------------------------------
-    */
-
     order.status = "cancelled";
 
-    /*
-     * For current COD flow payment remains pending.
-     * For future online payments, refund handling should
-     * be implemented separately through the payment gateway.
-     */
     if (
       order.paymentMethod === "cod"
     ) {
@@ -762,12 +601,6 @@ async function cancelMyOrder(req, res) {
     });
 
     await session.commitTransaction();
-
-    /*
-    |--------------------------------------------------------------------------
-    | Return updated order
-    |--------------------------------------------------------------------------
-    */
 
     const populatedOrder =
       await Order.findById(

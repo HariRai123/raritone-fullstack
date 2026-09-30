@@ -5,10 +5,6 @@ const uploadFile = require("../services/storage.service");
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// ======================================================
-// REGISTER USER - LEGACY
-// ======================================================
-
 async function registerUser(req, res) {
   try {
     const name = req.body.name?.trim();
@@ -33,7 +29,6 @@ async function registerUser(req, res) {
       });
     }
 
-    // Check existing email
     const existingUser = await User.findOne({
       email,
     });
@@ -44,7 +39,6 @@ async function registerUser(req, res) {
       });
     }
 
-    // Upload profile image
     let profileImage = "";
 
     if (req.file) {
@@ -67,11 +61,7 @@ async function registerUser(req, res) {
       email,
       password,
       profileImage,
-
-      // Public registration always creates a user
       role: "user",
-
-      // This endpoint is legacy
       provider: "password",
 
       isActive: true,
@@ -98,10 +88,6 @@ async function registerUser(req, res) {
     });
   }
 }
-
-// ======================================================
-// LOGIN USER - LEGACY
-// ======================================================
 
 async function loginUser(req, res) {
   try {
@@ -142,8 +128,6 @@ async function loginUser(req, res) {
         message: "Invalid email or password",
       });
     }
-
-    // Legacy JWT
     const token = jwt.sign(
       {
         id: user._id,
@@ -178,10 +162,6 @@ async function loginUser(req, res) {
   }
 }
 
-// ======================================================
-// GET PROFILE
-// ======================================================
-
 async function getProfile(req, res) {
   try {
     if (!req.user?.id) {
@@ -214,9 +194,6 @@ async function getProfile(req, res) {
   }
 }
 
-// ======================================================
-// UPDATE PROFILE
-// ======================================================
 
 async function updateProfile(req, res) {
   try {

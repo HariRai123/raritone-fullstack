@@ -14,13 +14,7 @@ const { handleImageUpload } = require("../middleware/upload.middleware");
 
 const router = express.Router();
 
-/*
- * POST /api/tryon
- *
- * Form-data:
- * - productId      -> Text
- * - person_image   -> File
- */
+
 router.post(
   "/",
   authMiddleware,
@@ -28,9 +22,6 @@ router.post(
   createTryOn
 );
 
-/*
- * Try-on session APIs
- */
 router.get(
   "/session/:id",
   authMiddleware,
@@ -43,9 +34,6 @@ router.post(
   retryTryOnSession
 );
 
-/*
- * History
- */
 router.get(
   "/history",
   authMiddleware,

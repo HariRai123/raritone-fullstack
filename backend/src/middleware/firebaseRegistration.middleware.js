@@ -1,16 +1,5 @@
 const { getAuth } = require("firebase-admin/auth");
 
-/*
-  Firebase Registration Middleware
-
-  Purpose:
-  - Verify the Firebase ID token.
-  - Extract Firebase user information.
-  - DO NOT search MongoDB here.
-
-  MongoDB user creation happens in:
-  controllers/firebaseAuth.controller.js
-*/
 
 const firebaseRegistrationMiddleware = async (
   req,
@@ -18,9 +7,6 @@ const firebaseRegistrationMiddleware = async (
   next,
 ) => {
   try {
-    // --------------------------------------------------------
-    // 1. Read Authorization header
-    // --------------------------------------------------------
 
     const authHeader =
       req.headers.authorization;
@@ -32,10 +18,6 @@ const firebaseRegistrationMiddleware = async (
       });
     }
 
-    // --------------------------------------------------------
-    // 2. Validate Bearer format
-    // --------------------------------------------------------
-
     if (!authHeader.startsWith("Bearer ")) {
       return res.status(401).json({
         message:
@@ -43,9 +25,6 @@ const firebaseRegistrationMiddleware = async (
       });
     }
 
-    // --------------------------------------------------------
-    // 3. Extract Firebase ID token
-    // --------------------------------------------------------
 
     const idToken =
       authHeader.substring(7).trim();
@@ -57,12 +36,6 @@ const firebaseRegistrationMiddleware = async (
       });
     }
 
-    // --------------------------------------------------------
-    // 4. Verify Firebase token
-    //
-    // IMPORTANT:
-    // Use getAuth() with the current firebase-admin API.
-    // --------------------------------------------------------
 
     const decodedToken =
       await getAuth().verifyIdToken(
@@ -70,7 +43,7 @@ const firebaseRegistrationMiddleware = async (
       );
 
     console.log(
-      "🔥 FIREBASE REGISTRATION TOKEN VERIFIED",
+      " FIREBASE REGISTRATION TOKEN VERIFIED",
     );
 
     console.log({
@@ -84,9 +57,6 @@ const firebaseRegistrationMiddleware = async (
           ?.sign_in_provider || "",
     });
 
-    // --------------------------------------------------------
-    // 5. Determine provider
-    // --------------------------------------------------------
 
     const firebaseProvider =
       decodedToken.firebase
@@ -104,12 +74,7 @@ const firebaseRegistrationMiddleware = async (
       provider = "phone";
     }
 
-    // --------------------------------------------------------
-    // 6. Put Firebase user into req.user
-    //
-    // DO NOT query MongoDB.
-    // The controller will create the user.
-    // --------------------------------------------------------
+
 
     req.user = {
       firebaseUid:
@@ -131,9 +96,6 @@ const firebaseRegistrationMiddleware = async (
       provider,
     };
 
-    // --------------------------------------------------------
-    // 7. Continue to controller
-    // --------------------------------------------------------
 
     next();
   } catch (error) {
@@ -141,10 +103,6 @@ const firebaseRegistrationMiddleware = async (
       "Firebase registration token verification failed:",
       error,
     );
-
-    // --------------------------------------------------------
-    // Invalid / expired token
-    // --------------------------------------------------------
 
     if (
       error?.code ===
@@ -175,10 +133,6 @@ const firebaseRegistrationMiddleware = async (
           "Invalid Firebase authentication token.",
       });
     }
-
-    // --------------------------------------------------------
-    // Generic authentication error
-    // --------------------------------------------------------
 
     return res.status(401).json({
       message:

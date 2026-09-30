@@ -18,11 +18,6 @@ const serializeUser = (user) => ({
 });
 
 
-/*
-|--------------------------------------------------------------------------
-| LOGIN SYNC
-|--------------------------------------------------------------------------
-*/
 
 const syncFirebaseUser = async (
   req,
@@ -39,7 +34,7 @@ const syncFirebaseUser = async (
     } = req.user || {};
 
     console.log(
-      "🔥 FIREBASE LOGIN SYNC",
+      "FIREBASE LOGIN SYNC",
     );
 
     console.log({
@@ -64,7 +59,7 @@ const syncFirebaseUser = async (
 
     if (!user) {
       console.log(
-        "❌ USER ACCOUNT NOT FOUND IN MONGODB:",
+        " USER ACCOUNT NOT FOUND IN MONGODB:",
         firebaseUid,
       );
 
@@ -80,14 +75,6 @@ const syncFirebaseUser = async (
           "Your account has been deactivated",
       });
     }
-
-    /*
-     * Update Firebase-linked information.
-     *
-     * Do NOT mark profileCompleted here.
-     * Profile completion is controlled by
-     * the Profile Setup screen.
-     */
 
     if (name) {
       user.name = name;
@@ -115,7 +102,7 @@ const syncFirebaseUser = async (
     await user.save();
 
     console.log(
-      "✅ FIREBASE USER LOGIN SYNC SUCCESS:",
+      "FIREBASE USER LOGIN SYNC SUCCESS:",
       user._id,
     );
 
@@ -143,12 +130,6 @@ const syncFirebaseUser = async (
 };
 
 
-/*
-|--------------------------------------------------------------------------
-| FIREBASE REGISTRATION
-|--------------------------------------------------------------------------
-*/
-
 const registerFirebaseUser = async (
   req,
   res,
@@ -164,7 +145,7 @@ const registerFirebaseUser = async (
     } = req.user || {};
 
     console.log(
-      "🔥 REGISTER FIREBASE USER CONTROLLER HIT",
+      " REGISTER FIREBASE USER CONTROLLER HIT",
     );
 
     console.log({
@@ -189,10 +170,6 @@ const registerFirebaseUser = async (
       });
     }
 
-    /*
-     * Firebase UID duplicate check
-     */
-
     const existingFirebaseUser =
       await User.findOne({
         firebaseUid,
@@ -205,9 +182,6 @@ const registerFirebaseUser = async (
       });
     }
 
-    /*
-     * Email duplicate check
-     */
 
     const cleanEmail =
       email?.trim().toLowerCase();
@@ -225,11 +199,6 @@ const registerFirebaseUser = async (
         });
       }
     }
-
-    /*
-     * Phone duplicate check
-     */
-
     const cleanPhone =
       phone?.trim();
 
@@ -246,10 +215,6 @@ const registerFirebaseUser = async (
         });
       }
     }
-
-    /*
-     * Provider
-     */
 
     let safeProvider =
       provider;
@@ -276,14 +241,6 @@ const registerFirebaseUser = async (
         "password";
     }
 
-    /*
-     * Create MongoDB user.
-     *
-     * IMPORTANT:
-     * profileCompleted remains false.
-     * It will become true only after
-     * Profile Setup is submitted.
-     */
 
     const user =
       await User.create({
@@ -353,12 +310,6 @@ const registerFirebaseUser = async (
 };
 
 
-/*
-|--------------------------------------------------------------------------
-| UPDATE PROFILE
-|--------------------------------------------------------------------------
-*/
-
 const updateFirebaseProfile = async (req, res) => {
   try {
     const firebaseUid = req.user?.firebaseUid;
@@ -392,12 +343,6 @@ const updateFirebaseProfile = async (req, res) => {
       clothingSize,
     } = req.body || {};
 
-    /*
-     * ---------------------------------------------------------
-     * BASIC PROFILE INFORMATION
-     * ---------------------------------------------------------
-     */
-
     if (typeof name === "string" && name.trim()) {
       user.name = name.trim();
     }
@@ -422,20 +367,9 @@ const updateFirebaseProfile = async (req, res) => {
       user.clothingSize = clothingSize.trim();
     }
 
-    /*
-     * ---------------------------------------------------------
-     * PROFILE IMAGE
-     * ---------------------------------------------------------
-     *
-     * Mobile app sends:
-     *
-     * profileImage -> multipart/form-data file
-     *
-     * Multer puts the file inside req.file.
-     */
 
     if (req.file) {
-      console.log("📸 PROFILE IMAGE RECEIVED");
+      console.log("PROFILE IMAGE RECEIVED");
 
       console.log({
         originalName: req.file.originalname,
@@ -458,7 +392,7 @@ const updateFirebaseProfile = async (req, res) => {
         fileName,
       );
 
-      console.log("✅ PROFILE IMAGE UPLOADED TO IMAGEKIT");
+      console.log("PROFILE IMAGE UPLOADED TO IMAGEKIT");
 
       if (!uploadResult?.url) {
         throw new Error(
@@ -469,23 +403,17 @@ const updateFirebaseProfile = async (req, res) => {
       user.profileImage = uploadResult.url;
 
       console.log(
-        "🖼️ IMAGEKIT URL:",
+        "IMAGEKIT URL:",
         uploadResult.url,
       );
     }
-
-    /*
-     * ---------------------------------------------------------
-     * PROFILE COMPLETION
-     * ---------------------------------------------------------
-     */
 
     user.profileCompleted = true;
 
     await user.save();
 
     console.log(
-      "✅ PROFILE UPDATED:",
+      "PROFILE UPDATED:",
       user._id,
     );
 
@@ -505,13 +433,6 @@ const updateFirebaseProfile = async (req, res) => {
     });
   }
 };
-
-
-/*
-|--------------------------------------------------------------------------
-| EXPORTS
-|--------------------------------------------------------------------------
-*/
 
 module.exports = {
   syncFirebaseUser,

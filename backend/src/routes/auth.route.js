@@ -18,11 +18,6 @@ const upload = multer({
 });
 
 
-/*
-|--------------------------------------------------------------------------
-| Legacy Authentication
-|--------------------------------------------------------------------------
-*/
 
 router.post(
   "/register",
@@ -41,25 +36,13 @@ router.post(
 );
 
 
-/*
-|--------------------------------------------------------------------------
-| Firebase Authentication
-|--------------------------------------------------------------------------
-*/
 
-/*
- * Existing Firebase user login
- */
 router.post(
   "/sync",
   authMiddleWare,
   firebaseAuthController.syncFirebaseUser,
 );
 
-
-/*
- * New Firebase user registration
- */
 router.post(
   "/register-firebase",
   firebaseRegistrationMiddleware,
@@ -67,15 +50,6 @@ router.post(
 );
 
 
-/*
-|--------------------------------------------------------------------------
-| Profile
-|--------------------------------------------------------------------------
-*/
-
-/*
- * Get authenticated profile
- */
 router.get(
   "/profile",
   authMiddleWare,
@@ -83,9 +57,7 @@ router.get(
 );
 
 
-/*
- * Update authenticated Firebase profile
- */
+
 router.put(
   "/profile",
   authMiddleWare,
